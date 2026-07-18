@@ -55,8 +55,13 @@ immediately (before generating anything) if one is missing.
 5. **Output** — CSV / SQL inserts / direct DB load, always written in
    dependency order.
 
-Everything is seeded (`random.Random(seed)`, `Faker.seed(seed)`); the same
-seed always produces byte-identical output.
+Everything is seeded (`random.Random(seed)`, `Faker.seed(seed)`), including
+UUID columns (drawn from the seeded RNG, still valid v4 UUIDs); the same seed
+always produces byte-identical output. Date/timestamp windows are anchored to
+a **fixed reference date** (2026-01-01, `generators/date_time.DEFAULT_AS_OF`)
+rather than the wall clock, so re-running the same command on a later day
+still reproduces the same data. Pass `--as-of YYYY-MM-DD` (or
+`EngineConfig.as_of`) to move the window explicitly.
 
 ## What's covered (MVP scope)
 
@@ -77,10 +82,18 @@ seed always produces byte-identical output.
 ## Known limitations (by design, not bugs)
 
 - **Arbitrary CHECK expressions** beyond the shapes above fall back to a
-  generate-and-filter loop using `simpleeval` against the raw SQL condition.
-  This works for simple additional shapes but can be slow or fail for tightly
-  constrained expressions; the validator will report it as a warning rather
-  than silently accepting bad data.
+  generate-and-filter retry loop using `simpleeval` against the raw SQL
+  condition (bounded at 50 retries per row; on exhaustion the engine raises
+  `DomainExhaustedError` rather than emitting invalid rows — very selective
+  constraints like `CHECK (a + b < 10)` over wide default ranges will hit
+  this; add explicit bounds to the columns to shrink the search space). The
+  fallback only applies when every column in the constraint can be safely
+  regenerated: unparsed CHECKs that involve a PK, FK, UNIQUE column, or a
+  member of a composite UNIQUE/PK group are **not** retried during generation
+  (regenerating those would break other guarantees) — they are instead
+  re-checked by the validator, which reports any violation. Expressions
+  `simpleeval` can't evaluate at all are skipped in generation and surfaced
+  as a validator warning rather than silently accepted.
 - **Cross-table business rules** (e.g. "sum of `order_items.price` equals
   `orders.total`") aren't expressible in a single-table CHECK and aren't
   handled — SQL itself can't express them, so there's nothing in the DDL to
@@ -97,10 +110,12 @@ seed always produces byte-identical output.
 - **Scale**: uniqueness enforcement uses Python-level retry + set tracking,
   fine to tens of thousands of rows per table; millions of rows would want a
   vectorized (numpy) rewrite of the generator loops.
-- The validator's "repair" is currently report-only: it tells you exactly what
-  and where a violation is (table, column, row index, constraint) rather than
-  silently patching it, on the view that a generator bug should be visible and
-  fixed at the source rather than papered over.
+- The validator is report-only by design: it tells you exactly what and where
+  a violation is (table, column, row index, constraint) rather than silently
+  patching it, on the view that a generator bug should be visible and fixed at
+  the source rather than papered over. It independently re-checks NOT NULL,
+  PK/UNIQUE, composite UNIQUE, FK integrity, CHECKs, enum membership, and
+  type conformance (declared SQL type vs the Python values produced).
 
 ## Repo layout
 
@@ -126,7 +141,8 @@ datagen/
   cli.py                  # `python -m datagen.cli ...`
 tests/
   fixtures/sample.sql
-  test_engine_end_to_end.py   # 16 tests covering every edge case above
+  test_engine_end_to_end.py   # end-to-end tests covering every edge case above
+  test_fixes.py               # regression tests, one per review-report defect
 ```
 
 ## Configuration knobs (`EngineConfig`)
@@ -138,4 +154,9 @@ tests/
 | `fk_null_rate` | 0.1 | Fraction of nullable FK values set to `None` |
 | `deferred_fk_null_rate` | 0.2 | Fraction left null for self-ref/cycle-broken FKs (e.g. employees with no manager) |
 | `fanout` | `"uniform"` | `"uniform"` (even FK fan-out) or `"zipfian"` (a few parents get most children) |
-| `pk_start` | `{}` | Per-table starting integer for sequential PKs |
+| `pk_start` | `{}` | Per-table starting integer for sequential PKs (no CLI flag) |
+| `as_of` | `None` (fixed 2026-01-01 anchor) | Anchor date for default date/timestamp windows; fixed by default so output never depends on the day the command runs |
+
+`seed`, `null_rate`, `fk_null_rate`, `deferred_fk_null_rate`, `fanout`, and
+`as_of` are all exposed as CLI flags (`--seed`, `--null-rate`,
+`--fk-null-rate`, `--deferred-fk-null-rate`, `--fanout`, `--as-of`).

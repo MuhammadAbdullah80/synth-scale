@@ -17,6 +17,7 @@ import re
 import sqlglot
 from sqlglot import exp
 
+from .generators.base import coerce_literal
 from .schema_model import CheckConstraint, Column, DataType, ForeignKey, SchemaModel, Table
 
 # Column-name substrings -> semantic hint used by generators/text.py to pick a
@@ -135,8 +136,15 @@ def _structural_parse_check(check_expr: exp.Expression) -> dict | None:
             right_is_col = isinstance(right, exp.Column)
             if left_is_col and not right_is_col:
                 try:
-                    bound = float(right.name)
-                except (ValueError, AttributeError):
+                    literal = right.name
+                except AttributeError:
+                    return None
+                # Type-aware: numeric literals become floats, date/timestamp
+                # literals ('2020-01-01', '2020-01-01 12:00:00') become
+                # date/datetime objects. Anything else stays unparsed and
+                # falls through to the generate-and-filter fallback.
+                bound = coerce_literal(literal)
+                if bound is None:
                     return None
                 return {"kind": "bound", "column": left.name, "op": op, "value": bound}
             if left_is_col and right_is_col:

@@ -13,8 +13,10 @@ from __future__ import annotations
 import random
 from datetime import date, datetime
 
+from ..schema_model import Column, DataType
 from .base import MAX_UNIQUE_RETRIES, DomainExhaustedError
 from .date_time import derive_dependent_date
+from .numeric import numeric_precision_cap
 
 
 def generate_composite_unique_tuples(
@@ -49,17 +51,49 @@ def generate_composite_unique_tuples(
 
 
 def derive_dependent_column(
-    base_values: list, op: str, rng: random.Random, min_delta: float | int = 1, max_delta: float | int = 90
+    base_values: list,
+    op: str,
+    rng: random.Random,
+    target: Column | None = None,
+    min_delta: float | int = 1,
+    max_delta: float | int = 90,
 ) -> list:
     """Construct-to-satisfy for a two-column CHECK (`left <op> right`), called
     with base_values = the already-generated *right-hand* column's values, so
     the returned list is a valid left-hand column: left <op> right holds for
     every row by construction.
+
+    Derivation is type-aware via `target` (the column being derived):
+    integer deltas for INTEGER/BIGINT/SMALLINT, values rounded to the
+    declared scale (and clamped to the precision cap) for NUMERIC, day
+    deltas for DATE/TIMESTAMP, plain float deltas otherwise.
     """
     if not base_values:
         return []
-    if isinstance(base_values[0], (date, datetime)):
+    sample = next((b for b in base_values if b is not None), None)
+    if isinstance(sample, (date, datetime)):
         return derive_dependent_date(base_values, op, rng, int(min_delta), int(max_delta))
 
     sign = 1 if op in (">", ">=") else -1
+    dtype = target.dtype if target is not None else None
+
+    if dtype in (DataType.INTEGER, DataType.BIGINT, DataType.SMALLINT):
+        lo_d, hi_d = int(min_delta), int(max_delta)
+        return [b + sign * rng.randint(lo_d, hi_d) if b is not None else None for b in base_values]
+
+    if dtype == DataType.NUMERIC:
+        scale = target.scale if target.scale is not None else 2
+        cap = numeric_precision_cap(target)
+        out = []
+        for b in base_values:
+            if b is None:
+                out.append(None)
+                continue
+            v = round(b + sign * rng.uniform(min_delta, max_delta), scale)
+            if cap is not None:
+                # Keep the derived value representable in NUMERIC(p,s).
+                v = max(min(v, cap), -cap)
+            out.append(v)
+        return out
+
     return [b + sign * rng.uniform(min_delta, max_delta) if b is not None else None for b in base_values]

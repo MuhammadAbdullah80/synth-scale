@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date
 from pathlib import Path
 
 from .ddl_parser import parse_ddl
@@ -42,6 +43,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--null-rate", type=float, default=0.05, help="Default null rate for nullable columns")
     parser.add_argument("--fk-null-rate", type=float, default=0.1, help="Default null rate for nullable FK columns")
     parser.add_argument(
+        "--deferred-fk-null-rate", type=float, default=0.2,
+        help="Null rate for self-referential/cycle-broken FKs (e.g. employees with no manager)",
+    )
+    parser.add_argument(
+        "--as-of", type=date.fromisoformat, default=None, metavar="YYYY-MM-DD",
+        help="Anchor date for default date/timestamp windows (default: a fixed built-in "
+             "date, so the same seed gives identical output regardless of the run day)",
+    )
+    parser.add_argument(
         "--fanout", choices=["uniform", "zipfian"], default="uniform",
         help="FK sampling distribution (uniform = even fan-out, zipfian = a few parents get most children)",
     )
@@ -79,16 +89,21 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         null_rate=args.null_rate,
         fk_null_rate=args.fk_null_rate,
+        deferred_fk_null_rate=args.deferred_fk_null_rate,
         fanout=args.fanout,
+        as_of=args.as_of,
     )
 
+    # Build the generation plan once and reuse it for both the engine run and
+    # the output writers (previously it was computed twice).
+    plan = build_generation_plan(schema)
+
     try:
-        generated = run_engine(schema, row_counts, config)
+        generated = run_engine(schema, row_counts, config, plan=plan)
     except Exception as e:
         print(f"error during generation: {e}", file=sys.stderr)
         return 1
 
-    plan = build_generation_plan(schema)
     report = validate(schema, generated, seed=args.seed)
     print(report.summary())
     if report.errors:
