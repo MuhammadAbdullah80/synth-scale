@@ -25,6 +25,12 @@ _HINT_DISPATCH = {
     "url": lambda f: f.url(),
     "ipv4": lambda f: f.ipv4(),
     "paragraph": lambda f: f.paragraph(nb_sentences=2),
+    # Pool-backed hints: with coherence on (the default) these are normally
+    # produced by generators/pools.py; this is the --no-coherence fallback.
+    "gender": lambda f: f.random_element(("female", "male", "nonbinary")),
+    "product_name": lambda f: f.catch_phrase(),
+    "category": lambda f: f.word().title(),
+    "tier": lambda f: f.random_element(("budget", "mid", "premium")),
 }
 
 

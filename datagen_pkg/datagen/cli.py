@@ -52,8 +52,24 @@ def main(argv: list[str] | None = None) -> int:
              "date, so the same seed gives identical output regardless of the run day)",
     )
     parser.add_argument(
-        "--fanout", choices=["uniform", "zipfian"], default="uniform",
-        help="FK sampling distribution (uniform = even fan-out, zipfian = a few parents get most children)",
+        "--fanout", choices=["uniform", "zipfian"], default="zipfian",
+        help="FK sampling distribution (zipfian = a few parents get most children, "
+             "the realistic default; uniform = perfectly even fan-out)",
+    )
+    parser.add_argument(
+        "--no-coherence", action="store_true",
+        help="Disable the coherence layer (correlated pools, updated_at >= created_at, "
+             "child rows newer than their parents, anchor-sorted hierarchies)",
+    )
+    parser.add_argument(
+        "--root-fraction", type=float, default=None, metavar="FRACTION",
+        help="Fraction of rows in a self-referencing hierarchy that are roots with a "
+             "NULL parent (default: the --deferred-fk-null-rate value)",
+    )
+    parser.add_argument(
+        "--pools", action="append", default=[], metavar="DIR",
+        help="Extra directory of *.json correlated-value pools (repeatable). A pool "
+             "whose name matches a packaged pool (geo, person, products) replaces it.",
     )
 
     args = parser.parse_args(argv)
@@ -92,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
         deferred_fk_null_rate=args.deferred_fk_null_rate,
         fanout=args.fanout,
         as_of=args.as_of,
+        coherence=not args.no_coherence,
+        root_fraction=args.root_fraction,
+        pool_dirs=args.pools,
     )
 
     # Build the generation plan once and reuse it for both the engine run and

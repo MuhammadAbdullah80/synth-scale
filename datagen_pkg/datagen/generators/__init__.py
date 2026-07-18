@@ -42,7 +42,7 @@ def generate_independent_column(
         if column.dtype == DataType.NUMERIC or column.dtype == DataType.FLOAT:
             return numeric.generate_numeric(column, count, rng, bounds)
         if column.dtype == DataType.BOOLEAN:
-            return numeric.generate_boolean(count, rng)
+            return numeric.generate_boolean(count, rng, column)
         if column.dtype == DataType.UUID:
             return numeric.generate_uuid(count, rng)
         if column.dtype == DataType.DATE:

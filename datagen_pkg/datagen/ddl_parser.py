@@ -42,6 +42,12 @@ _SEMANTIC_PATTERNS: list[tuple[str, str]] = [
     (r"created_?at|inserted_?at", "created_at"),
     (r"updated_?at|modified_?at", "updated_at"),
     (r"description|bio|summary|notes?$", "paragraph"),
+    # Pool-backed hints (see generators/pools.py). Kept after the broader
+    # patterns above so e.g. "category_description" still reads as paragraph.
+    (r"(^|_)gender($|_)|(^|_)sex$", "gender"),
+    (r"product_?name|item_?name", "product_name"),
+    (r"(^|_)category($|_)", "category"),
+    (r"(^|_)(tier|plan|grade)($|_)", "tier"),
 ]
 
 _DTYPE_MAP = {

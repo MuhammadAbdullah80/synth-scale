@@ -7,6 +7,17 @@ from ..schema_model import Column
 
 DEFAULT_DATE_WINDOW_DAYS = 730  # last 2 years, used when no bound is derivable
 
+# Hour-of-day weights for timestamp generation (consumer profile): activity
+# peaks 9:00-21:00, troughs 01:00-06:00. Indexed by hour 0-23.
+HOUR_WEIGHTS = [
+    2, 1, 1, 1, 1, 1,      # 00-05  night trough
+    2, 4, 6, 8, 9, 9,      # 06-11  morning ramp
+    10, 10, 9, 8, 8, 8,    # 12-17  daytime plateau
+    9, 10, 9, 8, 6, 4,     # 18-23  evening peak, wind-down
+]
+
+WEEKEND_REROLL_P = 0.6  # chance a Sat/Sun timestamp is re-rolled once
+
 # Fixed reference date used as the default window anchor. Deliberately a
 # constant (NOT date.today()): the reproducibility contract is "same seed,
 # same config -> byte-identical output", and a wall-clock anchor breaks that
@@ -59,7 +70,9 @@ def generate_date(
     span = (hi - lo).days
     if span <= 0:
         span = 1
-    return [lo + timedelta(days=rng.randint(0, span)) for _ in range(n)]
+    # Quadratic mass toward the recent end of the window (a growing app has
+    # more recent rows than old ones). Stays within [lo, hi] by construction.
+    return [hi - timedelta(days=int(span * rng.random() ** 2)) for _ in range(n)]
 
 
 def generate_timestamp(
@@ -74,10 +87,24 @@ def generate_timestamp(
     if hi is None:
         anchor_dt = datetime(anchor.year, anchor.month, anchor.day)
         hi = anchor_dt if anchor_dt > lo else lo + timedelta(days=365)
-    span_seconds = int((hi - lo).total_seconds())
-    if span_seconds <= 0:
-        span_seconds = 86_400
-    return [lo + timedelta(seconds=rng.randint(0, span_seconds)) for _ in range(n)]
+    span_days = max((hi - lo).days, 1)
+    hours = range(24)
+    values: list[datetime] = []
+    for _ in range(n):
+        # Recent-past growth curve: quadratic mass toward the upper end.
+        day = hi - timedelta(days=int(span_days * rng.random() ** 2))
+        # Weekday dip: a Sat/Sun pick is re-rolled once with 60% probability.
+        if day.weekday() >= 5 and rng.random() < WEEKEND_REROLL_P:
+            day = hi - timedelta(days=int(span_days * rng.random() ** 2))
+        # Business/evening-hours clustering for the time of day.
+        hour = rng.choices(hours, weights=HOUR_WEIGHTS)[0]
+        ts = datetime(day.year, day.month, day.day, hour, rng.randint(0, 59), rng.randint(0, 59))
+        if ts < lo:
+            ts = lo
+        elif ts > hi:
+            ts = hi
+        values.append(ts)
+    return values
 
 
 def derive_dependent_date(

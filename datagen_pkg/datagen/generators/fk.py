@@ -4,6 +4,10 @@ import random
 
 from ..schema_model import ForeignKey
 
+# Zipf exponent for fanout="zipfian". Pure 1/rank (s=1.0) is harsher than
+# real order data; 0.7 keeps a clear power-user head with a longer tail.
+ZIPF_EXPONENT = 0.7
+
 
 def generate_fk_column(
     fk: ForeignKey,
@@ -11,16 +15,17 @@ def generate_fk_column(
     parent_pk_pool: list,
     rng: random.Random,
     null_rate: float = 0.0,
-    fanout: str = "uniform",
+    fanout: str = "zipfian",
 ) -> list:
     """Generate n FK values by sampling from the parent table's already
     generated primary-key pool.
 
+    fanout="zipfian" (default): a minority of parents get most of the children
+        (a few power users own most orders) -- a perfectly even fan-out is
+        itself a fake-data tell. Which parents form the "head" is decided by
+        a seeded shuffle, so output stays deterministic.
     fanout="uniform": each child row independently picks a uniformly random
-        parent -> natural many-to-one distribution, most common case.
-    fanout="zipfian": a minority of parents get most of the children (e.g.
-        a few power users own most orders) -- more realistic for some domains,
-        available for a future iteration without changing the call site.
+        parent.
 
     A nullable FK applies `null_rate` before sampling (default 0 -- MVP is
     conservative and only nulls FK values if the schema explicitly allows it
@@ -33,7 +38,7 @@ def generate_fk_column(
         )
 
     if fanout == "zipfian":
-        weights = [1.0 / (i + 1) for i in range(len(parent_pk_pool))]
+        weights = [1.0 / (i + 1) ** ZIPF_EXPONENT for i in range(len(parent_pk_pool))]
         pool_order = list(parent_pk_pool)
         rng.shuffle(pool_order)
         picks = rng.choices(pool_order, weights=weights, k=n)

@@ -13,12 +13,19 @@ Checks performed: NOT NULL, PK uniqueness, single/composite UNIQUE, FK
 referential integrity, CHECK constraints (via the safe fallback evaluator),
 enum membership (independently of the generator's enum handling), and type
 conformance (declared SQL type vs the Python values actually produced).
+
+Coherence realism (updated_at >= created_at, child anchor >= parent anchor,
+self-referencing FKs acyclic) is re-checked at WARNING level -- these are
+realism properties, not schema constraints, so they never count as
+violations (and are expected to fire when the engine runs with coherence
+disabled).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
+from .coherence import detect_plan
 from .generators.check_eval import evaluate_check
 from .schema_model import DataType, SchemaModel, Table
 
@@ -227,6 +234,84 @@ def _check_type_conformance(table: Table, rows: list[dict], report: ValidationRe
                 )
 
 
+def _chrono_lt(a, b) -> bool:
+    """Compare two temporal values at the coarsest common granularity, so a
+    DATE cell is never flagged as 'earlier' than a TIMESTAMP on the same day."""
+    if isinstance(a, datetime) and isinstance(b, datetime):
+        return a < b
+    a_d = a.date() if isinstance(a, datetime) else a
+    b_d = b.date() if isinstance(b, datetime) else b
+    return a_d < b_d
+
+
+def _check_coherence_realism(schema: SchemaModel, generated: dict[str, list[dict]], report: ValidationReport) -> None:
+    """Warn-level realism checks (see datagen/coherence.py). Never counted as
+    violations: these are 'looks fake' tells, not schema constraints."""
+    plans = {tname: detect_plan(schema.tables[tname]) for tname in generated}
+
+    for tname, rows in generated.items():
+        plan = plans[tname]
+        if plan.anchor_col is None:
+            continue
+        # a. updated_at >= created_at within each row.
+        for ucol in plan.updated_cols:
+            bad = sum(
+                1 for r in rows
+                if r.get(ucol) is not None and r.get(plan.anchor_col) is not None
+                and _chrono_lt(r[ucol], r[plan.anchor_col])
+            )
+            if bad:
+                report.warnings.append(
+                    f"coherence: {tname}.{ucol} is earlier than {plan.anchor_col} on {bad} row(s)"
+                )
+        # b. child anchor >= parent anchor for every resolved FK.
+        table = schema.tables[tname]
+        for fk in table.foreign_keys:
+            if fk.ref_table == tname:
+                continue
+            parent_plan = plans.get(fk.ref_table)
+            if parent_plan is None or parent_plan.anchor_col is None:
+                continue
+            pmap = {
+                tuple(pr.get(c) for c in fk.ref_columns): pr.get(parent_plan.anchor_col)
+                for pr in generated.get(fk.ref_table, [])
+            }
+            bad = 0
+            for r in rows:
+                key = tuple(r.get(c) for c in fk.columns)
+                if any(v is None for v in key) or r.get(plan.anchor_col) is None:
+                    continue
+                pa = pmap.get(key)
+                if pa is not None and _chrono_lt(r[plan.anchor_col], pa):
+                    bad += 1
+            if bad:
+                report.warnings.append(
+                    f"coherence: {tname}.{plan.anchor_col} is earlier than its parent "
+                    f"{fk.ref_table}.{parent_plan.anchor_col} on {bad} row(s)"
+                )
+
+    # c. self-referencing FKs must form a forest (no cycles).
+    for tname, rows in generated.items():
+        for fk in schema.tables[tname].foreign_keys:
+            if fk.ref_table != tname or len(fk.columns) != 1:
+                continue
+            parent = {r.get(fk.ref_columns[0]): r.get(fk.columns[0]) for r in rows}
+            on_cycle = 0
+            for start in parent:
+                seen: set = set()
+                cur = start
+                while cur is not None and cur not in seen:
+                    seen.add(cur)
+                    cur = parent.get(cur)
+                if cur is not None:
+                    on_cycle += 1
+            if on_cycle:
+                report.warnings.append(
+                    f"coherence: {tname}.{fk.columns[0]} contains reference cycles "
+                    f"(reachable from {on_cycle} row(s)) -- a real hierarchy is a tree"
+                )
+
+
 def validate(schema: SchemaModel, generated: dict[str, list[dict]], seed: int = 42) -> ValidationReport:
     # `seed` is retained for call-site compatibility; validation is a pure,
     # deterministic read-only pass and uses no randomness.
@@ -243,4 +328,5 @@ def validate(schema: SchemaModel, generated: dict[str, list[dict]], seed: int = 
         _check_constraints(table, rows, report)
         _check_enum_membership(table, rows, report)
         _check_type_conformance(table, rows, report)
+    _check_coherence_realism(schema, generated, report)
     return report

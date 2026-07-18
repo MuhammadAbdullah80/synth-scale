@@ -31,6 +31,7 @@ from datetime import date
 
 from faker import Faker
 
+from .coherence import TableContext, apply_coherence
 from .dependency_graph import DeferredFK, GenerationPlan, build_generation_plan
 from .generators import generate_independent_column
 from .generators.base import DomainExhaustedError
@@ -38,6 +39,7 @@ from .generators.check_eval import evaluate_check
 from .generators.fk import generate_fk_column
 from .generators.linked_group import derive_dependent_column, generate_composite_unique_tuples
 from .generators.numeric import generate_sequential_pk, generate_uuid
+from .generators.pools import Pool, generate_pool_groups, load_pools
 from .schema_model import Column, DataType, ForeignKey, SchemaModel, Table
 
 MAX_CHECK_FILTER_RETRIES = 50  # per-row cap for the unparsed-CHECK retry loop
@@ -51,12 +53,21 @@ class EngineConfig:
     null_rate: float = 0.05          # default null rate for nullable, non-FK columns
     fk_null_rate: float = 0.1        # default null rate for nullable FK columns
     deferred_fk_null_rate: float = 0.2  # e.g. fraction of employees with no manager
-    fanout: str = "uniform"          # "uniform" | "zipfian", see generators/fk.py
+    fanout: str = "zipfian"          # "zipfian" | "uniform", see generators/fk.py
     pk_start: dict[str, int] = field(default_factory=dict)  # per-table starting PK int
     # Anchor for default date/timestamp windows. Fixed by default (see
     # generators/date_time.DEFAULT_AS_OF) so the same seed produces identical
     # data regardless of the day the command runs. Set to move the window.
     as_of: date | None = None
+    # Coherence layer (see datagen/coherence.py): correlated pools, cross-column
+    # and cross-table chronology, anchor-sorted self-referencing hierarchies.
+    coherence: bool = True
+    # Fraction of rows in a self-referencing hierarchy that are roots (NULL
+    # parent). None = reuse deferred_fk_null_rate.
+    root_fraction: float | None = None
+    # Extra pool directories (user-supplied *.json pools; a pool named like a
+    # packaged one replaces it). See generators/pools.py.
+    pool_dirs: list[str] = field(default_factory=list)
 
 
 GeneratedTables = dict[str, list[dict]]
@@ -109,7 +120,13 @@ def generate_table(
     generated_tables: GeneratedTables,
     config: EngineConfig,
     deferred_cols: set[str],
+    ctx: dict[str, TableContext] | None = None,
+    pools: dict[str, Pool] | None = None,
 ) -> list[dict]:
+    if ctx is None:
+        ctx = {}
+    if pools is None:
+        pools = load_pools(config.pool_dirs) if config.coherence else {}
     row_data: dict[str, list] = {}
     generated_cols: set[str] = set()
 
@@ -242,6 +259,15 @@ def generate_table(
         row_data[single_pk] = _generate_single_pk(table.get_column(single_pk), table, n, rng, config)
         generated_cols.add(single_pk)
 
+    # 4.5. Correlated pools (coherence layer): columns bound to the same pool
+    #      generate as a group from one record per row, so city/state/country,
+    #      first_name/gender, product/category/tier/price stay consistent.
+    if config.coherence and pools:
+        generate_pool_groups(
+            table, row_data, generated_cols, n, rng, fake, pools,
+            single_col_checks, config.null_rate,
+        )
+
     # 5. Everything else: independent columns.
     for col in table.columns:
         if col.name in generated_cols:
@@ -259,6 +285,12 @@ def generate_table(
     #    report (see README "Known limitations").
     _apply_unparsed_check_filter(table, row_data, n, rng, fake, single_col_checks, config,
                                  composite_groups, fk_by_col, deferred_cols)
+
+    # 7. Coherence post-pass (see datagen/coherence.py): rewrite timestamp
+    #    columns for cross-column and cross-table chronology and capture this
+    #    table's anchor context for its future children.
+    if config.coherence:
+        apply_coherence(table, row_data, n, rng, ctx, config, generated_tables, deferred_cols)
 
     return [{col.name: row_data[col.name][i] for col in table.columns} for i in range(n)]
 
@@ -317,9 +349,38 @@ def _apply_unparsed_check_filter(
                 ok = evaluate_check(chk.raw_sql, values)
 
 
+def _anchors_for(ctx: dict[str, TableContext], table_name: str, expected_len: int) -> list | None:
+    """Index-aligned anchor timestamps for a table, or None if unavailable."""
+    tctx = ctx.get(table_name)
+    if tctx is None or tctx.anchor_col is None or len(tctx.anchors) != expected_len:
+        return None
+    return tctx.anchors
+
+
 def _backfill_deferred_fks(
-    generated: GeneratedTables, deferred_fks: list[DeferredFK], rng: random.Random, config: EngineConfig
+    generated: GeneratedTables,
+    deferred_fks: list[DeferredFK],
+    rng: random.Random,
+    config: EngineConfig,
+    ctx: dict[str, TableContext] | None = None,
 ) -> None:
+    """Second pass for self-referential / cycle-broken FKs.
+
+    Self-referencing FKs (employees.manager_id, categories.parent_id, ...):
+    row i may only reference a row with index < i, so cycles are impossible
+    by construction -- the structure is always a forest. Row 0 is always a
+    root; every other row is a root with probability `root_fraction`
+    (default: deferred_fk_null_rate).
+
+    Cross-table cycle-broken FKs: when both sides carry anchor timestamps
+    (coherence layer), candidates are filtered to parents whose anchor is
+    <= the child's anchor -- a documented approximation, with NULL as the
+    fallback when no candidate qualifies.
+    """
+    ctx = ctx or {}
+    root_fraction = (
+        config.root_fraction if config.root_fraction is not None else config.deferred_fk_null_rate
+    )
     for d in deferred_fks:
         fk = d.fk
         child_rows = generated[d.child_table]
@@ -327,22 +388,38 @@ def _backfill_deferred_fks(
         pool = _ref_pool_scalar(parent_rows, fk.ref_columns)
         same_table = d.child_table == fk.ref_table
         col_name = fk.columns[0]
-        pk_col = fk.ref_columns[0] if same_table else None
 
-        for row in child_rows:
-            if rng.random() < config.deferred_fk_null_rate:
+        child_anchors = _anchors_for(ctx, d.child_table, len(child_rows))
+        parent_anchors = _anchors_for(ctx, fk.ref_table, len(parent_rows))
+
+        for i, row in enumerate(child_rows):
+            if same_table:
+                # Roots: row 0 always; others with probability root_fraction.
+                if i == 0 or rng.random() < root_fraction:
+                    row[col_name] = None
+                    continue
+                candidates = range(i)  # strictly earlier rows only -> acyclic
+            else:
+                if rng.random() < config.deferred_fk_null_rate:
+                    row[col_name] = None
+                    continue
+                candidates = range(len(pool))
+
+            if child_anchors is not None and parent_anchors is not None:
+                ca = child_anchors[i]
+                idxs = [
+                    j for j in candidates
+                    if ca is None or parent_anchors[j] is None or parent_anchors[j] <= ca
+                ]
+            else:
+                idxs = list(candidates)
+
+            if not idxs:
+                # No chronology-compatible candidate. The FK is nullable by
+                # construction (dependency_graph rejects NOT NULL cycles).
                 row[col_name] = None
                 continue
-            candidate = rng.choice(pool)
-            # Avoid a row pointing directly at itself when the FK is
-            # self-referential and there's more than one candidate available.
-            if same_table and pk_col is not None and len(pool) > 1:
-                own_pk_value = row.get(pk_col)
-                attempts = 0
-                while candidate == own_pk_value and attempts < 10:
-                    candidate = rng.choice(pool)
-                    attempts += 1
-            row[col_name] = candidate
+            row[col_name] = pool[rng.choice(idxs)]
 
 
 def run_engine(
@@ -366,6 +443,9 @@ def run_engine(
     for d in plan.deferred_fks:
         deferred_by_table.setdefault(d.child_table, set()).update(d.fk.columns)
 
+    ctx: dict[str, TableContext] = {}
+    pools = load_pools(config.pool_dirs) if config.coherence else {}
+
     generated: GeneratedTables = {}
     for table_name in plan.order:
         table = schema.tables[table_name]
@@ -376,8 +456,10 @@ def run_engine(
                 f"Pass --rows {table_name}=<N> or include it in the rows config."
             )
         deferred_cols = deferred_by_table.get(table_name, set())
-        generated[table_name] = generate_table(table, n, rng, fake, generated, config, deferred_cols)
+        generated[table_name] = generate_table(
+            table, n, rng, fake, generated, config, deferred_cols, ctx=ctx, pools=pools
+        )
 
-    _backfill_deferred_fks(generated, plan.deferred_fks, rng, config)
+    _backfill_deferred_fks(generated, plan.deferred_fks, rng, config, ctx=ctx)
 
     return generated
