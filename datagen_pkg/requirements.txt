@@ -1,0 +1,5 @@
+sqlglot>=30.0
+networkx>=3.6
+Faker>=40.0
+SQLAlchemy>=2.0
+simpleeval>=1.0
