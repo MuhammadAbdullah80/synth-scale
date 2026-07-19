@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 _probe_out/
+dist/
+*.egg-info/
+web/data/

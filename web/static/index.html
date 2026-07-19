@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Synth-Scale: paste your Postgres schema, get realistic, perfectly-linked synthetic data. Deterministic. Correct on the first run.">
+<title>Synth-Scale — deterministic synthetic data for Postgres</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%81%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/">synth<span class="brand-accent">-scale</span></a>
+    <nav class="site-nav">
+      <a href="#playground">Playground</a>
+      <a href="#why">Why</a>
+      <a href="#cli">CLI</a>
+      <a href="https://github.com/synth-scale/synth-scale" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ============================ HERO ============================ -->
+  <section class="hero">
+    <div class="wrap">
+      <h1>Paste your schema.<br>Get realistic, perfectly-linked data.</h1>
+      <p class="tagline">Deterministic. Correct on the first run. Every foreign key resolves,
+      every CHECK passes, every run with the same seed is byte-identical — no LLM in the data path.</p>
+
+      <div class="hero-actions">
+        <code class="chip" id="pip-chip" title="Click to copy">pip install synth-scale<span class="copy-hint">copy</span></code>
+        <a class="btn btn-ghost" href="#playground">Try it in the browser &darr;</a>
+      </div>
+
+      <form class="waitlist-form" data-waitlist>
+        <input type="email" name="email" placeholder="you@company.com" required autocomplete="email" aria-label="Email address">
+        <button type="submit" class="btn btn-primary">Join the waitlist</button>
+        <p class="waitlist-msg" role="status"></p>
+      </form>
+      <p class="social-proof" data-waitlist-count hidden></p>
+    </div>
+  </section>
+
+  <!-- ========================= PLAYGROUND ========================= -->
+  <section id="playground" class="playground">
+    <div class="wrap">
+      <h2>Playground</h2>
+      <p class="section-sub">Paste Postgres DDL (CREATE TABLE, FKs, CHECKs, enums). Capped at 15 tables /
+      1,000 total rows / 50&nbsp;KB — the <a href="#cli">CLI</a> has no caps. Your DDL is parsed, never executed.</p>
+
+      <div class="controls">
+        <label class="control">
+          <span>Rows <output id="rows-out">50</output></span>
+          <input type="range" id="rows" min="10" max="1000" step="10" value="50">
+        </label>
+        <label class="control control-seed">
+          <span>Seed</span>
+          <input type="number" id="seed" value="42" min="0" step="1">
+        </label>
+        <div class="control-buttons">
+          <button id="generate" class="btn btn-primary">Generate</button>
+          <button id="dl-sql" class="btn btn-ghost" disabled>Download SQL</button>
+          <button id="dl-csv" class="btn btn-ghost" disabled>Download CSV</button>
+        </div>
+      </div>
+
+      <textarea id="ddl" spellcheck="false" rows="18" aria-label="SQL DDL input"></textarea>
+
+      <p id="error" class="error" role="alert" hidden></p>
+      <p id="verdict" class="verdict" hidden></p>
+      <div id="results" class="results"></div>
+    </div>
+  </section>
+
+  <!-- ============================ WHY ============================= -->
+  <section id="why" class="why">
+    <div class="wrap">
+      <h2>Why not just ask Claude for a seed script?</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Reproducible</h3>
+          <p>An LLM writes you a <em>probably</em>-correct script that changes every time you re-prompt.
+          Synth-Scale is seeded end to end: same seed, same bytes — today, tomorrow, in CI. You can hash
+          the output and assert on it.</p>
+        </article>
+        <article class="card">
+          <h3>Constraint-correct at scale</h3>
+          <p>Tables are generated in FK dependency order, so every foreign key resolves, composite keys stay
+          unique, and CHECKs are satisfied <em>by construction</em> — then an independent validator re-checks
+          every constraint. 50,000 rows behave exactly like 50.</p>
+        </article>
+        <article class="card">
+          <h3>Coherent data</h3>
+          <p>Not a random grid: <code>updated_at&nbsp;&ge;&nbsp;created_at</code>, orders newer than their
+          users, a <code>shipped</code> order has a <code>shipped_at</code>, Karachi stays in Pakistan, and a
+          few power users own most of the orders — like real production data.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CLI ============================= -->
+  <section id="cli" class="cli">
+    <div class="wrap">
+      <h2>The real tool is the CLI</h2>
+      <p class="section-sub">This page is the demo. The CLI parses your migrations, introspects live Supabase/Postgres
+      schemas, and loads 50k coherent rows straight into your database — no caps, fully offline.</p>
+      <pre class="codeblock"><code>$ pip install synth-scale
+
+<span class="c"># see it before you seed it — pretty 10-row preview, zero writes</span>
+$ synth-scale --ddl schema.sql --rows 100 --preview
+
+<span class="c"># full run: CSV / SQL inserts / direct DB load, deterministic seed</span>
+$ synth-scale --ddl schema.sql --rows 1000 --seed 42 --format sql --out ./seed
+
+<span class="c"># point it at a live database instead of a .sql file</span>
+$ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
+      <a class="btn btn-ghost" href="https://github.com/synth-scale/synth-scale" rel="noopener">Read the docs on GitHub &rarr;</a>
+    </div>
+  </section>
+
+  <!-- ========================= BOTTOM CTA ========================= -->
+  <section class="bottom-cta">
+    <div class="wrap">
+      <h2>Get launch updates</h2>
+      <p class="section-sub">PyPI release, Supabase introspection, CI data contracts. One email when it ships. Nothing else.</p>
+      <form class="waitlist-form" data-waitlist>
+        <input type="email" name="email" placeholder="you@company.com" required autocomplete="email" aria-label="Email address">
+        <button type="submit" class="btn btn-primary">Join the waitlist</button>
+        <p class="waitlist-msg" role="status"></p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>synth-scale — deterministic synthetic data for Postgres &amp; Supabase.
+    No cookies, no analytics, no accounts. Your DDL is parsed in memory and never stored or executed.</p>
+  </div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

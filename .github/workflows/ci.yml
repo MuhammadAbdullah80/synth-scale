@@ -1,0 +1,49 @@
+# CI for Synth-Scale (datagen): the bar is "a real Postgres accepted the data".
+#
+# Runs the FULL test suite -- including the live-Postgres load, benchmark, and
+# introspection tests, which are gated on SYNTH_PG_URL -- against a postgres:16
+# service container. NOTE: written offline (this workflow has not been
+# exercised on GitHub yet); if a step fails on first push, suspect the service
+# wiring, not the tests.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: synthtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d synthtest"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./datagen_pkg psycopg2-binary pytest
+
+      - name: Run full test suite against live Postgres
+        working-directory: datagen_pkg
+        env:
+          SYNTH_PG_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/synthtest
+        run: python -m pytest tests/ -q

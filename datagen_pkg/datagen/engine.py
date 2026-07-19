@@ -32,11 +32,12 @@ from datetime import date
 from faker import Faker
 
 from .coherence import TableContext, apply_coherence
+from .config import ColumnOverride, FanoutAllocation
 from .dependency_graph import DeferredFK, GenerationPlan, build_generation_plan
 from .generators import generate_independent_column
-from .generators.base import DomainExhaustedError
+from .generators.base import MAX_UNIQUE_RETRIES, DomainExhaustedError
 from .generators.check_eval import evaluate_check
-from .generators.fk import generate_fk_column
+from .generators.fk import expand_allocation, generate_fk_column
 from .generators.linked_group import derive_dependent_column, generate_composite_unique_tuples
 from .generators.numeric import generate_sequential_pk, generate_uuid
 from .generators.pools import Pool, generate_pool_groups, load_pools
@@ -68,6 +69,18 @@ class EngineConfig:
     # Extra pool directories (user-supplied *.json pools; a pool named like a
     # packaged one replaces it). See generators/pools.py.
     pool_dirs: list[str] = field(default_factory=list)
+    # Exact per-parent fanout allocations from a "5..20 per users" rows spec
+    # (see datagen/config.py resolve_row_counts), keyed by child table name.
+    # When a child table has an allocation for one of its FKs, that FK's
+    # values are assigned so parent i gets exactly per_parent[i] children,
+    # overriding the uniform/zipfian sampling for that FK.
+    fanout_allocations: dict[str, FanoutAllocation] = field(default_factory=dict)
+    # Per-column overrides from [columns] in synthscale.toml, keyed
+    # "table.column". Closed value lists are applied to the schema itself
+    # (config.apply_column_overrides rewrites column.enum_values / injects
+    # bound CHECKs); the engine additionally honors explicit `weights` for
+    # value lists in step 4.4 below.
+    column_overrides: dict[str, ColumnOverride] = field(default_factory=dict)
 
 
 GeneratedTables = dict[str, list[dict]]
@@ -149,18 +162,35 @@ def generate_table(
     if len(table.primary_key) > 1:
         composite_groups.append(table.primary_key)
 
+    # Exact per-parent fanout allocation for this table, if a "LO..HI per
+    # parent" rows spec was resolved for it (see datagen/config.py).
+    alloc = config.fanout_allocations.get(table.name)
+
     # 1. Composite PK/UNIQUE groups: generate as unique tuples. FK members
     #    sample from parent pools; non-FK members use their own single-value
     #    generator. A group containing the table's single-column PK is skipped:
     #    the PK is unique on its own (which makes the tuple unique) and must
     #    keep sequential/UUID generation in stage 4.
+    #    If one group member is the FK carrying a fanout allocation (junction
+    #    tables like order_items with PK (order_id, product_id)), that member
+    #    is fixed to the expanded allocation and only the OTHER members are
+    #    re-drawn on uniqueness collisions, so the per-parent counts stay exact.
     for group in composite_groups:
         if not group or any(c in generated_cols for c in group):
             continue
         if single_pk is not None and single_pk in group:
             continue
+        alloc_col = None
+        if alloc is not None:
+            for c in group:
+                fk = fk_by_col.get(c)
+                if fk is not None and len(fk.columns) == 1 and fk.ref_table == alloc.parent_table:
+                    alloc_col = c
+                    break
         gens = {}
         for c in group:
+            if c == alloc_col:
+                continue
             if c in fk_by_col:
                 fk = fk_by_col[c]
                 pool = _ref_pool_scalar(generated_tables[fk.ref_table], fk.ref_columns)
@@ -169,9 +199,22 @@ def generate_table(
                 gens[c] = _one_value_callable(
                     table.get_column(c), n, rng, fake, single_col_checks, config.as_of
                 )
-        tuples = generate_composite_unique_tuples(
-            gens, n, label=f"{table.name}({','.join(group)})"
-        )
+        label = f"{table.name}({','.join(group)})"
+        if alloc_col is not None:
+            fk = fk_by_col[alloc_col]
+            pool = _ref_pool_scalar(generated_tables[fk.ref_table], fk.ref_columns)
+            alloc_values = expand_allocation(pool, alloc.per_parent, rng)
+            if len(alloc_values) != n:
+                raise ValueError(
+                    f"Fanout allocation for {table.name!r} sums to {len(alloc_values)} "
+                    f"rows but {n} were requested; the child row count must equal "
+                    f"the allocation total."
+                )
+            tuples = _composite_tuples_with_allocation(
+                list(group), alloc_col, alloc_values, gens, n, label
+            )
+        else:
+            tuples = generate_composite_unique_tuples(gens, n, label=label)
         for c, vals in tuples.items():
             row_data[c] = vals
             generated_cols.add(c)
@@ -186,8 +229,14 @@ def generate_table(
         if len(fk.columns) == 1:
             c = fk.columns[0]
             pool = _ref_pool_scalar(generated_tables[fk.ref_table], fk.ref_columns)
+            allocation = None
+            if alloc is not None and fk.ref_table == alloc.parent_table:
+                allocation = alloc.per_parent
             values = generate_fk_column(
-                fk, n, pool, rng, null_rate=config.fk_null_rate if fk.nullable else 0.0, fanout=config.fanout
+                fk, n, pool, rng,
+                null_rate=config.fk_null_rate if fk.nullable else 0.0,
+                fanout=config.fanout,
+                allocation=allocation,
             )
             row_data[c] = values
             generated_cols.add(c)
@@ -259,6 +308,28 @@ def generate_table(
         row_data[single_pk] = _generate_single_pk(table.get_column(single_pk), table, n, rng, config)
         generated_cols.add(single_pk)
 
+    # 4.4. Weighted closed value lists from [columns] overrides. Unweighted
+    #      lists ride the normal enum machinery (config.apply_column_overrides
+    #      rewrote column.enum_values); explicit weights need a weighted draw,
+    #      done here. UNIQUE columns are skipped (weights would force
+    #      duplicates) and fall through to the enum + uniqueness path.
+    for ov in config.column_overrides.values():
+        if ov.table != table.name or ov.values is None or not ov.weights:
+            continue
+        try:
+            column = table.get_column(ov.column)
+        except KeyError:
+            raise ValueError(
+                f"[columns] override targets unknown column {ov.table}.{ov.column}"
+            ) from None
+        if column.name in generated_cols or column.is_unique:
+            continue
+        values = rng.choices(ov.values, weights=ov.weights, k=n)
+        if column.nullable and config.null_rate > 0:
+            values = [None if rng.random() < config.null_rate else v for v in values]
+        row_data[column.name] = values
+        generated_cols.add(column.name)
+
     # 4.5. Correlated pools (coherence layer): columns bound to the same pool
     #      generate as a group from one record per row, so city/state/country,
     #      first_name/gender, product/category/tier/price stay consistent.
@@ -293,6 +364,42 @@ def generate_table(
         apply_coherence(table, row_data, n, rng, ctx, config, generated_tables, deferred_cols)
 
     return [{col.name: row_data[col.name][i] for col in table.columns} for i in range(n)]
+
+
+def _composite_tuples_with_allocation(
+    group: list[str],
+    alloc_col: str,
+    alloc_values: list,
+    gens: dict,
+    n: int,
+    label: str,
+) -> dict[str, list]:
+    """Composite-unique tuple generation where one member (`alloc_col`) is
+    pinned row-by-row to an exact fanout allocation. Only the OTHER members
+    are re-drawn on a collision, so every parent keeps exactly its drawn
+    number of child rows."""
+    seen: set = set()
+    out: dict[str, list] = {c: [] for c in group}
+    for i in range(n):
+        fixed = alloc_values[i]
+        for _attempt in range(MAX_UNIQUE_RETRIES + 1):
+            candidate = tuple(
+                fixed if c == alloc_col else gens[c]() for c in group
+            )
+            if candidate not in seen:
+                break
+        else:
+            raise DomainExhaustedError(
+                f"Could not generate {n} unique combinations for {label} while "
+                f"honoring the fanout allocation on {alloc_col!r}: a parent's drawn "
+                f"child count exceeds the feasible combination space (e.g. more "
+                f"items per order than distinct products). Lower the fanout range "
+                f"or raise the other parent table's row count."
+            )
+        seen.add(candidate)
+        for c, v in zip(group, candidate):
+            out[c].append(v)
+    return out
 
 
 def _apply_unparsed_check_filter(

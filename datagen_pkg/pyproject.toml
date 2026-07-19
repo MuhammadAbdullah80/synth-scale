@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synth-scale"
+version = "0.1.0"
+description = "Deterministic, referentially-consistent synthetic data for SQL schemas: parse DDL, resolve FK topology, generate rows that satisfy every constraint - same seed, same bytes, every run."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = [
+    "synthetic-data",
+    "test-data",
+    "seed-data",
+    "fixtures",
+    "database",
+    "sql",
+    "ddl",
+    "postgres",
+    "faker",
+    "deterministic",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "sqlglot>=30.0",
+    "networkx>=3.6",
+    "Faker>=40.0",
+    "SQLAlchemy>=2.0",
+    "simpleeval>=1.0",
+    "typer>=0.12",
+    "rich>=13",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary"]
+
+[project.scripts]
+synth-scale = "datagen.cli:app_main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["datagen"]
+# The correlated-value pools (datagen/pools/*.json) are runtime data and MUST
+# ship in the wheel; they live inside the package so hatchling includes them,
+# and the explicit artifacts pattern guards against exclusion-rule regressions.
+artifacts = ["datagen/pools/*.json"]
+
+[tool.hatch.build.targets.sdist]
+include = ["datagen", "tests", "README.md"]

@@ -1,0 +1,7 @@
+# Web front door deps. The engine itself (import package `datagen`) is NOT
+# listed here -- it installs from the repo checkout: pip install ../datagen_pkg
+fastapi>=0.115
+uvicorn[standard]>=0.30
+# tests
+httpx>=0.27
+pytest>=8

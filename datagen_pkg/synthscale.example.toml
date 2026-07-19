@@ -1,0 +1,37 @@
+# synthscale.toml -- Synth-Scale project config (copy next to your schema as
+# `synthscale.toml` and it is auto-discovered; or pass --config <path>).
+#
+# Precedence: CLI flags > this file > built-in defaults.
+# Same seed + same config = byte-identical output.
+
+[project]
+seed = 42
+as_of = 2026-01-01          # anchor for date/timestamp windows (bare TOML date)
+
+[rows]
+# Per-table row counts -- same semantics as `--rows table=N`.
+# A count can also be a FANOUT RANGE: you state the relationship, not a total.
+# "5..20 per users" = every users row gets 5..20 orders (drawn deterministically
+# from the seed); the orders row count becomes the sum of the draws, and each
+# parent receives exactly its drawn number of children.
+users = 100
+orders = "5..20 per users"
+order_items = "1..5 per orders"   # shorthand also accepted: "1..5/orders"
+
+[generation]
+# Optional overrides mapping 1:1 onto EngineConfig fields.
+null_rate = 0.05
+fk_null_rate = 0.1
+fanout = "zipfian"          # "zipfian" | "uniform" (FKs without a fanout range)
+coherence = true
+root_fraction = 0.15        # share of roots in self-referencing hierarchies
+# pool_dirs = ["./pools"]   # extra *.json correlated-value pool directories
+
+# Per-column overrides. Quote the "table.column" key.
+[columns."users.status"]
+values = ["active", "trial", "churned"]   # closed value list (like CHECK IN);
+weights = [0.7, 0.2, 0.1]                 # must be a subset of any real enum/CHECK
+
+[columns."products.price"]
+min = 5.0                   # intersected with CHECK bounds: config narrows,
+max = 500.0                 # never widens (disjoint bounds are an error)

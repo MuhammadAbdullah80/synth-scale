@@ -1,4 +1,4 @@
-# datagen
+# synth-scale (`datagen`)
 
 Deterministic, referentially-consistent test-data generator for relational
 schemas. Parses DDL (`CREATE TABLE`, with PK/FK/UNIQUE/CHECK constraints,
@@ -9,13 +9,23 @@ calls, fully reproducible given a seed.
 ## Install
 
 ```bash
-pip install -r requirements.txt
+pip install synth-scale
 ```
+
+> Not yet on PyPI — for now install from a checkout: `pip install -e .`
+> (installs the `synth-scale` command; the import package is `datagen`).
+> Direct Postgres loading/introspection needs the extra:
+> `pip install -e ".[postgres]"`.
 
 ## Quick start
 
 ```bash
-python -m datagen.cli \
+# See it before you seed it: generate, pretty-print the first 10 rows of
+# every table (Rich), and write NOTHING to disk.
+synth-scale --ddl schema.sql --rows 100 --preview
+
+# Full run:
+synth-scale \
   --ddl schema.sql \
   --rows "categories=5,users=10,employees=8,products=20,orders=30,order_items=60" \
   --seed 42 \
@@ -23,12 +33,101 @@ python -m datagen.cli \
   --out ./out
 ```
 
+(`python -m datagen.cli ...` still works and takes exactly the same flags.)
+
 `--format` also accepts `sql` (batched `INSERT` statements, FK-safe order,
 wrapped in a transaction) and `db` (direct load via SQLAlchemy — pass
 `--db-url`, assumes the target tables already exist).
 
-Every table in the DDL needs an entry in `--rows`; the CLI errors out
-immediately (before generating anything) if one is missing.
+`--rows` takes either form:
+
+- **Per-table**: `--rows users=100,orders=500,...` — every table in the DDL
+  needs an entry; the CLI errors out immediately (before generating anything)
+  if one is missing. The explicit form always wins.
+- **Single integer**: `--rows 100` — every table gets 100 rows, except a
+  table that references other tables via FK gets **3x the largest of its
+  parents' counts, capped at 10x the base** (computed in dependency order;
+  self-referencing FKs don't count as parents). So with `--rows 100` on the
+  sample schema: `users`=100, `orders`=300, `order_items`=900.
+
+Instead of a DDL file you can point at a **live database** as the schema
+source: `synth-scale --from-db --db-url postgres://... --rows 100` introspects
+the schema (tables, PK/FK/UNIQUE/CHECK) and generates from that — no `.sql`
+file needed. Requires the `postgres` extra.
+
+## Config file & fanout ranges
+
+Instead of a pile of flags, describe the dataset once in a `synthscale.toml`
+(see `synthscale.example.toml` for a commented copy):
+
+```toml
+[project]            # optional
+seed = 42
+as_of = 2026-01-01
+
+[rows]               # per-table row counts; same semantics as --rows table=N
+users = 100
+orders = "5..20 per users"     # fanout range (see below)
+order_items = "1..5 per orders"
+
+[generation]         # optional overrides mapping to EngineConfig fields
+null_rate = 0.05
+fk_null_rate = 0.1
+fanout = "zipfian"
+coherence = true
+root_fraction = 0.15
+
+[columns."users.status"]       # optional per-column overrides
+values = ["active", "trial", "churned"]   # closed value list (weights optional)
+weights = [0.7, 0.2, 0.1]
+[columns."products.price"]
+min = 5.0
+max = 500.0
+```
+
+Then just: `synth-scale --ddl schema.sql`. A `./synthscale.toml` is
+**auto-discovered**; `--config path/to.toml` points at one explicitly (and
+wins over discovery); `--no-config` ignores any config file.
+
+**Precedence: CLI flags > config file > built-in defaults.** An explicitly
+passed flag (`--seed 7`, `--null-rate 0`, `--fanout uniform`, ...) always
+beats the config file's value; a config value beats the built-in default.
+For row counts the merge is per table: `--rows orders=50` overrides only the
+config's `orders` entry, the config file fills in the rest (the single-integer
+`--rows N` heuristic, being a whole-plan rule, replaces the `[rows]` section
+entirely).
+
+**Fanout ranges** — `orders = "5..20 per users"` (shorthand `"5..20/users"`)
+states the *relationship* instead of a total: every `users` row draws
+`randint(5, 20)` child orders from a seeded RNG, `orders`' row count becomes
+the sum of the draws, and FK assignment honors the draw **exactly** — each
+parent gets precisely its drawn number of children (assignment order is
+shuffled deterministically). The `per` target must be a direct single-column
+FK parent of the table (exactly one FK to it; anything else is a clear error).
+Junction tables with a composite PK (e.g. `order_items(order_id, product_id)`)
+are supported: the allocated FK member is pinned and only the other members
+are re-drawn on uniqueness collisions. A nullable FK under a fanout range is
+never nulled — the exact allocation outranks `fk_null_rate`.
+
+The same syntax works without a config file:
+
+```bash
+synth-scale --ddl schema.sql \
+  --rows "users=100,orders=5..20/users,order_items=2..6/orders"
+```
+
+**Per-column overrides** (`[columns."table.column"]`, config file only):
+
+- `values` (+ optional `weights`): a closed value list, enforced through the
+  same machinery as `CHECK (col IN (...))`. If the column already has an
+  enum/CHECK domain, the config list must be a **subset** (error otherwise);
+  weights are honored except on UNIQUE columns.
+- `min` / `max`: intersected with any CHECK bounds — config **narrows, never
+  widens**; disjoint bounds are an error. Values are type-checked against the
+  column type (numbers for numeric columns, dates for date columns).
+
+Everything stays deterministic: same seed + same config = byte-identical
+output.
 
 ## How it works
 
@@ -223,7 +322,7 @@ datagen/
   validator.py            # independent post-generation constraint re-check
   output/
     csv_writer.py, sql_writer.py, db_loader.py
-  cli.py                  # `python -m datagen.cli ...`
+  cli.py                  # Typer + Rich CLI (`synth-scale` / `python -m datagen.cli`)
 tests/
   fixtures/sample.sql, fixtures/hard.sql
   test_engine_end_to_end.py   # end-to-end tests covering every edge case above
