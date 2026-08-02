@@ -43,6 +43,11 @@ CREATE TABLE orders (
 
 const $ = (sel) => document.querySelector(sel);
 const ddlEl = $("#ddl");
+const dbUrlEl = $("#db-url");
+const tabDdl = $("#tab-ddl");
+const tabDb = $("#tab-db");
+const panelDdl = $("#panel-ddl");
+const panelDb = $("#panel-db");
 const rowsEl = $("#rows");
 const rowsOut = $("#rows-out");
 const seedEl = $("#seed");
@@ -56,7 +61,32 @@ const resultsEl = $("#results");
 ddlEl.value = EXAMPLE_DDL;
 rowsEl.addEventListener("input", () => (rowsOut.textContent = rowsEl.value));
 
+/* ---- source tabs: "Paste DDL" vs "Connect a database" ---- */
+let activeSource = "ddl";
+
+function setSource(source) {
+  activeSource = source;
+  const isDdl = source === "ddl";
+  tabDdl.classList.toggle("active", isDdl);
+  tabDb.classList.toggle("active", !isDdl);
+  tabDdl.setAttribute("aria-selected", String(isDdl));
+  tabDb.setAttribute("aria-selected", String(!isDdl));
+  panelDdl.hidden = !isDdl;
+  panelDb.hidden = isDdl;
+}
+
+tabDdl.addEventListener("click", () => setSource("ddl"));
+tabDb.addEventListener("click", () => setSource("db"));
+
 function currentBody(format) {
+  if (activeSource === "db") {
+    return {
+      db_url: dbUrlEl.value,
+      rows: parseInt(rowsEl.value, 10) || 50,
+      seed: parseInt(seedEl.value, 10) || 0,
+      format,
+    };
+  }
   return {
     ddl: ddlEl.value,
     rows: parseInt(rowsEl.value, 10) || 50,
@@ -77,7 +107,11 @@ function clearError() {
 }
 
 async function apiGenerate(format) {
-  const resp = await fetch("/api/generate", {
+  if (activeSource === "db" && !dbUrlEl.value.trim()) {
+    throw new Error("Paste a connection string first.");
+  }
+  const endpoint = activeSource === "db" ? "/api/connect" : "/api/generate";
+  const resp = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(currentBody(format)),

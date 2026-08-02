@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import MetaData, Table as SATable, create_engine, insert
 
+from ..dburl import normalize_db_url
 from ..schema_model import SchemaModel
 
 BATCH_SIZE = 1000
@@ -12,7 +13,7 @@ def load_to_db(schema: SchemaModel, generated: dict[str, list[dict]], order: lis
     in FK-safe order, batched. Assumes the target tables already exist (the
     same DDL you fed the parser) -- this does not run CREATE TABLE.
     """
-    engine = create_engine(connection_url)
+    engine = create_engine(normalize_db_url(connection_url))
     metadata = MetaData()
     inserted_counts: dict[str, int] = {}
 

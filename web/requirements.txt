@@ -1,5 +1,9 @@
 # Web front door deps. The engine itself (import package `datagen`) is NOT
-# listed here -- it installs from the repo checkout: pip install ../datagen_pkg
+# listed here -- it installs from the repo checkout:
+#   pip install -e "../datagen_pkg[postgres]"
+# The [postgres] extra (psycopg2-binary) is what powers /api/connect; without
+# it the app still boots and /api/generate still works, but /api/connect
+# returns a clean 503 (see app/main.py's DB_CONNECT_AVAILABLE guard).
 fastapi>=0.115
 uvicorn[standard]>=0.30
 # tests

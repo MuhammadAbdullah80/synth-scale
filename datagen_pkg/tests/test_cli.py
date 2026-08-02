@@ -165,3 +165,60 @@ def test_sql_format_directory_out_defaults_to_insert_sql(tmp_path):
     )
     assert result.exit_code == 0, result.output + result.stderr
     assert (out_dir / "insert.sql").exists()
+
+
+# --- --db-url env-var fallback (DATABASE_URL / SYNTH_SCALE_DB_URL) ----------
+# introspect_db() is monkeypatched to a fake that records the db_url it was
+# called with and raises -- this proves the env-var-vs-flag resolution logic
+# without making a real network connection (no real/fake host, no DNS, no
+# flakiness from sandbox network behavior).
+
+def _patch_introspect_records_call(monkeypatch):
+    calls = []
+
+    def fake_introspect_db(db_url, *args, **kwargs):
+        calls.append(db_url)
+        raise RuntimeError("simulated connection failure")
+
+    monkeypatch.setattr("datagen.introspect.introspect_db", fake_introspect_db)
+    return calls
+
+
+def test_from_db_falls_back_to_database_url_env(monkeypatch):
+    calls = _patch_introspect_records_call(monkeypatch)
+    monkeypatch.setenv("DATABASE_URL", "postgres://u:pw@env-host-1:5432/db")
+    monkeypatch.delenv("SYNTH_SCALE_DB_URL", raising=False)
+    result = _invoke("--from-db", "--rows", "5")
+    assert result.exit_code == 1
+    # postgres:// was normalized to postgresql:// before being used.
+    assert calls == ["postgresql://u:pw@env-host-1:5432/db"]
+    # The CLI's error message shows the redacted target, not the password.
+    assert "env-host-1" in result.stderr
+    assert "pw" not in result.stderr
+
+
+def test_from_db_synth_scale_db_url_takes_precedence_over_database_url(monkeypatch):
+    calls = _patch_introspect_records_call(monkeypatch)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:pw@database-url-host:5432/db")
+    monkeypatch.setenv("SYNTH_SCALE_DB_URL", "postgresql://u:pw@synth-scale-host:5432/db")
+    result = _invoke("--from-db", "--rows", "5")
+    assert result.exit_code == 1
+    assert calls == ["postgresql://u:pw@synth-scale-host:5432/db"]
+
+
+def test_explicit_db_url_flag_wins_over_env(monkeypatch):
+    calls = _patch_introspect_records_call(monkeypatch)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:pw@env-host:5432/db")
+    result = _invoke("--from-db", "--db-url", "postgresql://u:pw@flag-host:5432/db", "--rows", "5")
+    assert result.exit_code == 1
+    assert calls == ["postgresql://u:pw@flag-host:5432/db"]
+
+
+def test_from_db_without_db_url_or_env_mentions_both(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SYNTH_SCALE_DB_URL", raising=False)
+    result = _invoke("--from-db", "--rows", "5")
+    assert result.exit_code == 1
+    assert "--db-url" in result.stderr
+    assert "SYNTH_SCALE_DB_URL" in result.stderr
+    assert "DATABASE_URL" in result.stderr

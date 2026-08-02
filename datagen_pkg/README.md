@@ -53,7 +53,12 @@ wrapped in a transaction) and `db` (direct load via SQLAlchemy — pass
 Instead of a DDL file you can point at a **live database** as the schema
 source: `synth-scale --from-db --db-url postgres://... --rows 100` introspects
 the schema (tables, PK/FK/UNIQUE/CHECK) and generates from that — no `.sql`
-file needed. Requires the `postgres` extra.
+file needed. Requires the `postgres` extra. `--db-url` also falls back to
+`$DATABASE_URL`/`$SYNTH_SCALE_DB_URL` so you don't have to paste a password
+on the command line. **Supabase is just Postgres here** — see
+[`docs/supabase.md`](docs/supabase.md) for the five-minute connection-string
+→ preview → load walkthrough, including the pooler-vs-direct-connection
+gotcha.
 
 ## Config file & fanout ranges
 

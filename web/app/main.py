@@ -3,9 +3,16 @@
 Run from the `web/` directory:  uvicorn app.main:app
 
 Security posture:
-- The submitted DDL is untrusted *text* fed to sqlglot for parsing only. It
-  is never executed against any database; this app contains no DB driver, no
-  connection string handling, and no `--format db` path at all.
+- /api/generate: the submitted DDL is untrusted *text* fed to sqlglot for
+  parsing only. It is never executed against any database.
+- /api/connect: the one place this app DOES open a real database connection
+  (opt-in "Connect to Supabase" flow). It is read-only end to end --
+  introspection only, no INSERT/write-back path exists anywhere in this app
+  -- the connection string is used for a single request and never logged or
+  persisted, the target host is checked against private/internal IP ranges
+  before any socket opens (dbsafety.py), and it has its own, much tighter
+  rate limit than /api/generate. See service_db.py and dbsafety.py for the
+  full rationale and documented residual risk.
 - No CORS middleware is installed, so no Access-Control-Allow-* headers are
   ever emitted: browsers enforce same-origin for the API.
 - Request bodies are capped (413) before they reach any handler.
@@ -30,6 +37,21 @@ from . import service
 from .ratelimit import SlidingWindowLimiter
 from .waitlist import Waitlist, valid_email
 
+try:
+    # service_db itself only imports SQLAlchemy (a base dependency, always
+    # present) -- the actual Postgres driver is loaded lazily by SQLAlchemy
+    # at connect time, so importing service_db alone would succeed even
+    # without the [postgres] extra. Check for psycopg2 explicitly so a
+    # deploy missing it gets a clean 503 up front instead of every request
+    # failing deep inside a connection attempt.
+    import psycopg2  # noqa: F401
+
+    from . import service_db
+    DB_CONNECT_AVAILABLE = True
+except ImportError:
+    service_db = None
+    DB_CONNECT_AVAILABLE = False
+
 WEB_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = WEB_DIR / "static"
 DATA_DIR = Path(os.environ.get("SYNTH_SCALE_DATA_DIR", WEB_DIR / "data"))
@@ -38,7 +60,13 @@ MAX_BODY_BYTES = 256 * 1024  # generous roof over the 50 KB DDL cap
 RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_RATE_LIMIT", "10"))
 RATE_WINDOW_SECONDS = 3600.0
 
+# Connecting to a caller-supplied database is far more expensive/risky than
+# parsing pasted DDL text (it opens a real outbound TCP connection to
+# whatever host they typed), so it gets its own, much tighter limit.
+DB_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_DB_RATE_LIMIT", "3"))
+
 limiter = SlidingWindowLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
+db_limiter = SlidingWindowLimiter(limit=DB_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 waitlist = Waitlist(DATA_DIR / "waitlist.jsonl")
 
 app = FastAPI(title="Synth-Scale", docs_url=None, redoc_url=None, openapi_url=None)
@@ -152,6 +180,13 @@ class GenerateRequest(BaseModel):
     format: Literal["preview", "sql", "csv"] = "preview"
 
 
+class ConnectRequest(BaseModel):
+    db_url: str = Field(min_length=1, max_length=2000)
+    rows: int = Field(default=50, ge=1, le=service.MAX_TOTAL_ROWS)
+    seed: int = Field(default=42, ge=0, le=2**31 - 1)
+    format: Literal["preview", "sql", "csv"] = "preview"
+
+
 class WaitlistRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
 
@@ -203,6 +238,66 @@ def generate(req: GenerateRequest, request: Request):
         )
 
     # csv -> zip of per-table files, built entirely in memory
+    blob = service.csv_zip_bytes(schema, generated, order)
+    return Response(
+        content=blob,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="synth_scale_seed{req.seed}_csv.zip"'
+        },
+    )
+
+
+@app.post("/api/connect")
+def connect(req: ConnectRequest, request: Request):
+    """Read-only: introspect a caller-supplied database, generate data from
+    its live schema, and return it. There is no path from this endpoint (or
+    anywhere else in this app) that writes back to the caller's database --
+    see service_db.py's module docstring for the full security posture."""
+    if not DB_CONNECT_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connect isn't enabled on this deployment. Use the "
+                   "CLI instead: pip install 'synth-scale[postgres]'.",
+        )
+
+    allowed, retry_after = db_limiter.check(client_ip(request))
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": (
+                    f"Rate limit: {db_limiter.limit} database connections per hour "
+                    f"per IP. Try again in ~{max(retry_after // 60, 1)} min, or "
+                    f"install the CLI (pip install synth-scale) for unlimited "
+                    f"local runs."
+                )
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    try:
+        schema, order, row_counts, generated, report = service_db.generate_from_db(
+            req.db_url, req.rows, req.seed
+        )
+    except service.CapError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    if req.format == "preview":
+        return service.preview_payload(
+            schema, order, row_counts, generated, report, req.seed, req.rows
+        )
+
+    if req.format == "sql":
+        text = service.sql_text(schema, generated, order, req.seed)
+        return Response(
+            content=text,
+            media_type="application/sql",
+            headers={
+                "Content-Disposition": f'attachment; filename="synth_scale_seed{req.seed}.sql"'
+            },
+        )
+
     blob = service.csv_zip_bytes(schema, generated, order)
     return Response(
         content=blob,

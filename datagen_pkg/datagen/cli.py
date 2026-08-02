@@ -22,6 +22,8 @@ import typer
 from rich.console import Console
 from rich.table import Table as RichTable
 
+import os
+
 from .config import (
     CONFIG_FILENAME,
     ConfigError,
@@ -33,10 +35,17 @@ from .config import (
     resolve_row_counts,
 )
 from .ddl_parser import parse_ddl
+from .dburl import normalize_db_url, redact_db_url
 from .dependency_graph import build_generation_plan
 from .engine import EngineConfig, run_engine
 from .output import load_to_db, write_csv, write_sql
 from .validator import validate
+
+# Env vars checked (in this order) when --db-url is omitted -- lets Supabase/
+# Heroku-style projects that already export a connection string in their
+# shell or .env just work without pasting a secret onto the command line
+# (and into shell history).
+DB_URL_ENV_VARS = ("SYNTH_SCALE_DB_URL", "DATABASE_URL")
 
 # --- integer --rows heuristic (documented in --help and the README) --------
 CHILD_MULTIPLIER = 3   # a child table gets 3x the largest of its parents
@@ -66,6 +75,37 @@ class OutputFormat(str, Enum):
 class Fanout(str, Enum):
     uniform = "uniform"
     zipfian = "zipfian"
+
+
+def _db_error_hint(db_url: str, exc: Exception) -> str:
+    """Turn a raw SQLAlchemy/psycopg2 connection error into something a
+    Supabase user can actually act on, without ever echoing the password
+    back (the connection string is shown redacted; the exception text is
+    scrubbed for the parsed-out password too, in case the driver quoted the
+    DSN verbatim in its own message)."""
+    from urllib.parse import urlsplit
+
+    password = urlsplit(db_url).password
+    detail = str(exc)
+    if password:
+        detail = detail.replace(password, "***")
+    target = redact_db_url(db_url)
+    is_supabase = "supabase.co" in db_url or "supabase.com" in db_url
+    msg = f"could not connect to {target}: {detail}"
+    lowered = detail.lower()
+    if is_supabase and ("password" in lowered or "authentication" in lowered):
+        msg += (
+            "\n  hint: re-copy the connection string from Supabase's dashboard "
+            "(Project Settings -> Database) -- the password there is the "
+            "database password, not your Supabase account password."
+        )
+    elif is_supabase and ("ssl" in lowered or "timeout" in lowered or "timed out" in lowered):
+        msg += (
+            "\n  hint: Supabase's direct connection (port 5432) requires SSL and "
+            "may be IPv6-only on some networks; try the Session Pooler connection "
+            "string instead (port 6543, works over IPv4)."
+        )
+    return msg
 
 
 def _fail(message: str, code: int = 1) -> typer.Exit:
@@ -246,8 +286,11 @@ def main(
     out: str = typer.Option("./out", "--out", help="Output directory (csv) or file (sql). Ignored for db."),
     db_url: Optional[str] = typer.Option(
         None, "--db-url",
-        help="SQLAlchemy connection URL. Required for --format db, and used as "
-             "the schema source with --from-db.",
+        help="SQLAlchemy connection URL (a Supabase/Heroku/Postgres connection "
+             "string works as-is, postgres:// included). Required for --format "
+             "db, and used as the schema source with --from-db. Falls back to "
+             f"the {' / '.join(DB_URL_ENV_VARS)} environment variable if omitted, "
+             "so you don't have to put a password on the command line.",
     ),
     dialect: str = typer.Option("postgres", "--dialect", help="DDL SQL dialect for sqlglot."),
     null_rate: float = typer.Option(0.05, "--null-rate", help="Default null rate for nullable columns."),
@@ -338,21 +381,44 @@ def main(
     )
     eff_pool_dirs = list(pools) if pools else list(gen_cfg.get("pool_dirs", []))
 
+    # --- db-url resolution ---------------------------------------------------
+    # Explicit --db-url wins; otherwise fall back to the first of
+    # DB_URL_ENV_VARS that's set, so a Supabase/Heroku-style project that
+    # already exports DATABASE_URL just works. Normalize postgres:// ->
+    # postgresql:// either way (SQLAlchemy >=1.4 rejects the bare scheme).
+    db_url_source = None
+    if db_url:
+        db_url_source = "--db-url"
+    else:
+        for var in DB_URL_ENV_VARS:
+            if os.environ.get(var):
+                db_url = os.environ[var]
+                db_url_source = f"${var}"
+                break
+    if db_url:
+        db_url = normalize_db_url(db_url)
+        if db_url_source and db_url_source != "--db-url":
+            console.print(f"[dim]Using --db-url from {db_url_source}[/dim]", highlight=False)
+
     # --- schema source ------------------------------------------------------
     if from_db:
         if not db_url:
-            raise _fail("--from-db requires --db-url")
+            raise _fail(
+                "--from-db requires --db-url (or one of "
+                f"{', '.join(DB_URL_ENV_VARS)} in the environment)"
+            )
         try:
             from .introspect import introspect_db
         except ImportError:
             raise _fail(
                 "introspection module not available in this build "
-                "(--from-db needs datagen.introspect; install the postgres extra)"
+                "(--from-db needs datagen.introspect; install the postgres extra: "
+                "pip install 'synth-scale[postgres]')"
             )
         try:
             schema = introspect_db(db_url)
         except Exception as e:
-            raise _fail(f"could not introspect database: {e}")
+            raise _fail(_db_error_hint(db_url, e))
     else:
         if ddl is None:
             raise _fail("--ddl is required (or pass --from-db with --db-url)")
@@ -463,8 +529,14 @@ def main(
         console.print(f"\nWrote SQL inserts to {path}", highlight=False)
     elif format is OutputFormat.db:
         if not db_url:
-            raise _fail("--db-url is required when --format db")
-        counts = load_to_db(schema, generated, plan.order, db_url)
+            raise _fail(
+                "--db-url is required when --format db (or one of "
+                f"{', '.join(DB_URL_ENV_VARS)} in the environment)"
+            )
+        try:
+            counts = load_to_db(schema, generated, plan.order, db_url)
+        except Exception as e:
+            raise _fail(_db_error_hint(db_url, e))
         console.print(f"\nLoaded rows into database: {counts}", highlight=False)
 
     if report.errors:

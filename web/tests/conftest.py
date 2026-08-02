@@ -14,11 +14,13 @@ from app.waitlist import Waitlist  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def isolate_state(tmp_path, monkeypatch):
-    """Fresh rate-limit window and a throwaway waitlist file per test."""
+    """Fresh rate-limit windows and a throwaway waitlist file per test."""
     main.limiter.reset()
+    main.db_limiter.reset()
     monkeypatch.setattr(main, "waitlist", Waitlist(tmp_path / "waitlist.jsonl"))
     yield
     main.limiter.reset()
+    main.db_limiter.reset()
 
 
 @pytest.fixture()

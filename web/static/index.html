@@ -17,7 +17,7 @@
       <a href="#playground">Playground</a>
       <a href="#why">Why</a>
       <a href="#cli">CLI</a>
-      <a href="https://github.com/synth-scale/synth-scale" rel="noopener">GitHub</a>
+      <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">GitHub</a>
     </nav>
   </div>
 </header>
@@ -48,8 +48,30 @@
   <section id="playground" class="playground">
     <div class="wrap">
       <h2>Playground</h2>
-      <p class="section-sub">Paste Postgres DDL (CREATE TABLE, FKs, CHECKs, enums). Capped at 15 tables /
-      1,000 total rows / 50&nbsp;KB — the <a href="#cli">CLI</a> has no caps. Your DDL is parsed, never executed.</p>
+
+      <div class="source-tabs" role="tablist">
+        <button type="button" id="tab-ddl" class="source-tab active" role="tab" aria-selected="true">Paste DDL</button>
+        <button type="button" id="tab-db" class="source-tab" role="tab" aria-selected="false">Connect a database <span class="beta-badge">beta</span></button>
+      </div>
+
+      <div id="panel-ddl" class="source-panel">
+        <p class="section-sub">Paste Postgres DDL (CREATE TABLE, FKs, CHECKs, enums). Capped at 15 tables /
+        1,000 total rows / 50&nbsp;KB — the <a href="#cli">CLI</a> has no caps. Your DDL is parsed, never executed.</p>
+        <textarea id="ddl" spellcheck="false" rows="18" aria-label="SQL DDL input"></textarea>
+      </div>
+
+      <div id="panel-db" class="source-panel" hidden>
+        <p class="section-sub">Paste a Postgres connection string (Supabase: Project Settings &rarr;
+        Database &rarr; Connection string — the Session Pooler one works best). We introspect your
+        schema and generate data <strong>read-only</strong> — nothing is ever written back to your
+        database, and the connection string is used once for this request and never stored or logged.
+        Rate-limited separately (3/hour) because this opens a real connection to your host.</p>
+        <input type="password" id="db-url" class="db-url-input" autocomplete="off" spellcheck="false"
+          placeholder="postgresql://postgres.xxxx:password@aws-0-region.pooler.supabase.com:6543/postgres"
+          aria-label="Database connection string">
+        <p class="db-url-hint">Only publicly reachable databases work here — private/internal hosts are
+        rejected before we connect. For anything on a private network, use the <a href="#cli">CLI</a> instead.</p>
+      </div>
 
       <div class="controls">
         <label class="control">
@@ -66,8 +88,6 @@
           <button id="dl-csv" class="btn btn-ghost" disabled>Download CSV</button>
         </div>
       </div>
-
-      <textarea id="ddl" spellcheck="false" rows="18" aria-label="SQL DDL input"></textarea>
 
       <p id="error" class="error" role="alert" hidden></p>
       <p id="verdict" class="verdict" hidden></p>
@@ -118,7 +138,7 @@ $ synth-scale --ddl schema.sql --rows 1000 --seed 42 --format sql --out ./seed
 
 <span class="c"># point it at a live database instead of a .sql file</span>
 $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
-      <a class="btn btn-ghost" href="https://github.com/synth-scale/synth-scale" rel="noopener">Read the docs on GitHub &rarr;</a>
+      <a class="btn btn-ghost" href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">Read the docs on GitHub &rarr;</a>
     </div>
   </section>
 

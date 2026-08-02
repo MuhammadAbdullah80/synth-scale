@@ -137,6 +137,35 @@ section { padding: 3.5rem 0; }
 }
 #ddl:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* ---- source tabs (Paste DDL / Connect a database) ---- */
+.source-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; }
+.source-tab {
+  font-family: var(--sans); font-size: 0.92rem; font-weight: 600;
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.5rem 0.9rem; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.source-tab:hover { color: var(--text); }
+.source-tab.active {
+  background: var(--bg-raise); color: var(--accent); border-color: var(--accent);
+}
+.beta-badge {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 999px; padding: 0.1em 0.5em;
+}
+.source-panel { margin-bottom: 0.8rem; }
+.db-url-input {
+  width: 100%; font-family: var(--mono); font-size: 0.9rem;
+  background: var(--code-bg); color: var(--code-text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+}
+.db-url-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.db-url-hint { color: var(--text-dim); font-size: 0.82rem; margin: 0.5rem 0 0; }
+.db-url-hint a { color: var(--accent); }
+
 .error {
   background: var(--danger-soft); color: var(--danger);
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);

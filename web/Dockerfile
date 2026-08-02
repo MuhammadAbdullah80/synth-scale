@@ -8,8 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /srv
 
 # Engine first (own layer: it changes less often than the web app).
+# [postgres] pulls in psycopg2-binary, which powers the /api/connect
+# ("Connect to Supabase") flow; without it the app still boots fine and
+# /api/connect just returns a clean 503.
 COPY datagen_pkg /srv/datagen_pkg
-RUN pip install --no-cache-dir /srv/datagen_pkg
+RUN pip install --no-cache-dir "/srv/datagen_pkg[postgres]"
 
 COPY web/requirements.txt /srv/web/requirements.txt
 RUN pip install --no-cache-dir -r /srv/web/requirements.txt

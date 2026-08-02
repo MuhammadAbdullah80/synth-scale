@@ -27,6 +27,8 @@ Notes on fidelity vs the DDL parser:
 """
 from __future__ import annotations
 
+import math
+
 import sqlglot
 from sqlglot import exp
 from sqlalchemy import create_engine, text
@@ -36,6 +38,7 @@ from .ddl_parser import (
     _infer_semantic_hint,
     _structural_parse_check,
 )
+from .dburl import normalize_db_url
 from .schema_model import CheckConstraint, Column, DataType, ForeignKey, SchemaModel, Table
 
 # information_schema.columns.data_type -> DataType
@@ -166,10 +169,26 @@ def _parse_check_definition(definition: str) -> exp.Expression | None:
     return _normalize_check_expr(parsed)
 
 
-def introspect_db(db_url: str) -> SchemaModel:
+def introspect_db(db_url: str, connect_timeout: float | None = None) -> SchemaModel:
     """Introspect a live Postgres database into a SchemaModel equivalent to
-    what parse_ddl() would produce from the original DDL."""
-    engine = create_engine(db_url)
+    what parse_ddl() would produce from the original DDL.
+
+    connect_timeout (seconds) is passed through to the DBAPI as libpq's
+    `connect_timeout` -- unset by default (trusted local/CLI use just waits
+    on the OS default), but callers that dial arbitrary caller-supplied
+    hosts (the web playground's Connect-to-Supabase flow) should always pass
+    one so a slow/unreachable host can't tie up a worker indefinitely.
+    """
+    db_url = normalize_db_url(db_url)
+    # libpq's connect_timeout is documented as an integer number of seconds;
+    # psycopg2 rejects a float verbatim ("invalid integer value ... for
+    # connection option 'connect_timeout'"). Round up so a sub-second budget
+    # still applies rather than silently truncating to 0 (which libpq
+    # treats as "no timeout").
+    connect_args = {}
+    if connect_timeout:
+        connect_args["connect_timeout"] = max(1, math.ceil(connect_timeout))
+    engine = create_engine(db_url, connect_args=connect_args)
     try:
         with engine.connect() as conn:
             table_names = [r[0] for r in conn.execute(text(_TABLES_SQL))]
