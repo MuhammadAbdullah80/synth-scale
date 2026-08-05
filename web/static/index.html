@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Synth-Scale: paste your Postgres schema, get realistic, perfectly-linked synthetic data. Deterministic. Correct on the first run.">
-<title>Synth-Scale — deterministic synthetic data for Postgres</title>
+<title>Synth-Scale: deterministic synthetic data for Postgres</title>
 <link rel="stylesheet" href="/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%81%3C/text%3E%3C/svg%3E">
 </head>
@@ -28,7 +28,7 @@
     <div class="wrap">
       <h1>Paste your schema.<br>Get realistic, perfectly-linked data.</h1>
       <p class="tagline">Deterministic. Correct on the first run. Every foreign key resolves,
-      every CHECK passes, every run with the same seed is byte-identical — no LLM in the data path.</p>
+      every CHECK passes, every run with the same seed is byte-identical. No LLM in the data path.</p>
 
       <div class="hero-actions">
         <code class="chip" id="pip-chip" title="Click to copy">pip install synth-scale<span class="copy-hint">copy</span></code>
@@ -56,20 +56,20 @@
 
       <div id="panel-ddl" class="source-panel">
         <p class="section-sub">Paste Postgres DDL (CREATE TABLE, FKs, CHECKs, enums). Capped at 15 tables /
-        1,000 total rows / 50&nbsp;KB — the <a href="#cli">CLI</a> has no caps. Your DDL is parsed, never executed.</p>
+        1,000 total rows / 50&nbsp;KB. The <a href="#cli">CLI</a> has no caps. Your DDL is parsed, never executed.</p>
         <textarea id="ddl" spellcheck="false" rows="18" aria-label="SQL DDL input"></textarea>
       </div>
 
       <div id="panel-db" class="source-panel" hidden>
         <p class="section-sub">Paste a Postgres connection string (Supabase: Project Settings &rarr;
-        Database &rarr; Connection string — the Session Pooler one works best). We introspect your
-        schema and generate data <strong>read-only</strong> — nothing is ever written back to your
+        Database &rarr; Connection string, the Session Pooler one works best). We introspect your
+        schema and generate data <strong>read-only</strong>: nothing is ever written back to your
         database, and the connection string is used once for this request and never stored or logged.
         Rate-limited separately (3/hour) because this opens a real connection to your host.</p>
         <input type="password" id="db-url" class="db-url-input" autocomplete="off" spellcheck="false"
           placeholder="postgresql://postgres.xxxx:password@aws-0-region.pooler.supabase.com:6543/postgres"
           aria-label="Database connection string">
-        <p class="db-url-hint">Only publicly reachable databases work here — private/internal hosts are
+        <p class="db-url-hint">Only publicly reachable databases work here. Private/internal hosts are
         rejected before we connect. For anything on a private network, use the <a href="#cli">CLI</a> instead.</p>
       </div>
 
@@ -103,20 +103,20 @@
         <article class="card">
           <h3>Reproducible</h3>
           <p>An LLM writes you a <em>probably</em>-correct script that changes every time you re-prompt.
-          Synth-Scale is seeded end to end: same seed, same bytes — today, tomorrow, in CI. You can hash
+          Synth-Scale is seeded end to end: same seed, same bytes, today, tomorrow, in CI. You can hash
           the output and assert on it.</p>
         </article>
         <article class="card">
           <h3>Constraint-correct at scale</h3>
           <p>Tables are generated in FK dependency order, so every foreign key resolves, composite keys stay
-          unique, and CHECKs are satisfied <em>by construction</em> — then an independent validator re-checks
+          unique, and CHECKs are satisfied <em>by construction</em>, then an independent validator re-checks
           every constraint. 50,000 rows behave exactly like 50.</p>
         </article>
         <article class="card">
           <h3>Coherent data</h3>
           <p>Not a random grid: <code>updated_at&nbsp;&ge;&nbsp;created_at</code>, orders newer than their
           users, a <code>shipped</code> order has a <code>shipped_at</code>, Karachi stays in Pakistan, and a
-          few power users own most of the orders — like real production data.</p>
+          few power users own most of the orders, like real production data.</p>
         </article>
       </div>
     </div>
@@ -127,10 +127,10 @@
     <div class="wrap">
       <h2>The real tool is the CLI</h2>
       <p class="section-sub">This page is the demo. The CLI parses your migrations, introspects live Supabase/Postgres
-      schemas, and loads 50k coherent rows straight into your database — no caps, fully offline.</p>
+      schemas, and loads 50k coherent rows straight into your database. No caps, fully offline.</p>
       <pre class="codeblock"><code>$ pip install synth-scale
 
-<span class="c"># see it before you seed it — pretty 10-row preview, zero writes</span>
+<span class="c"># see it before you seed it: pretty 10-row preview, zero writes</span>
 $ synth-scale --ddl schema.sql --rows 100 --preview
 
 <span class="c"># full run: CSV / SQL inserts / direct DB load, deterministic seed</span>
@@ -158,7 +158,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
 
 <footer class="site-footer">
   <div class="wrap">
-    <p>synth-scale — deterministic synthetic data for Postgres &amp; Supabase.
+    <p>synth-scale: deterministic synthetic data for Postgres &amp; Supabase.
     No cookies, no analytics, no accounts. Your DDL is parsed in memory and never stored or executed.</p>
   </div>
 </footer>

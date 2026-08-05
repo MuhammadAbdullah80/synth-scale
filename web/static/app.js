@@ -1,7 +1,7 @@
-/* Synth-Scale playground — vanilla JS, no dependencies. */
+/* Synth-Scale playground. Vanilla JS, no dependencies. */
 "use strict";
 
-const EXAMPLE_DDL = `-- Example: a small shop. Edit freely — FKs, CHECKs and enums all work.
+const EXAMPLE_DDL = `-- Example: a small shop. Edit freely: FKs, CHECKs and enums all work.
 CREATE TABLE categories (
   id SERIAL PRIMARY KEY,
   name VARCHAR(60) NOT NULL UNIQUE,
@@ -134,9 +134,9 @@ function renderPreview(data) {
   const v = data.validation;
   const ok = v.violations_found === 0;
   verdictEl.textContent = ok
-    ? `✓ 0 violations — ${v.constraints_checked} constraints checked — ` +
-      `${data.total_rows} rows — deterministic seed ${data.seed}`
-    : `✗ ${v.violations_found} violations found — see server logs`;
+    ? `✓ 0 violations · ${v.constraints_checked} constraints checked · ` +
+      `${data.total_rows} rows · deterministic seed ${data.seed}`
+    : `✗ ${v.violations_found} violations found. See server logs.`;
   verdictEl.classList.toggle("bad", !ok);
   verdictEl.hidden = false;
 
@@ -148,7 +148,7 @@ function renderPreview(data) {
     h.textContent = t.name + " ";
     const span = document.createElement("span");
     span.className = "rowcount";
-    span.textContent = `— showing ${t.rows.length} of ${t.total_rows} rows`;
+    span.textContent = `(showing ${t.rows.length} of ${t.total_rows} rows)`;
     h.appendChild(span);
     block.appendChild(h);
 
@@ -268,8 +268,8 @@ for (const form of document.querySelectorAll("[data-waitlist]")) {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "Something went wrong.");
       msg.textContent = data.added
-        ? `You're in — #${data.count} on the list.`
-        : "You're already on the list — see you at launch.";
+        ? `You're in, #${data.count} on the list.`
+        : "You're already on the list. See you at launch.";
       input.value = "";
       updateCount(data.count);
     } catch (e) {
