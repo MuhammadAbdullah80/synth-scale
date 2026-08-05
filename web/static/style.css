@@ -1,44 +1,44 @@
 /* Synth-Scale front door. Self-contained, system fonts only. */
 
 :root {
-  --bg: #f7f1e6;
-  --bg-raise: #fffdf8;
-  --bg-inset: #efe4cf;
-  --text: #221c14;
-  --text-dim: #6f6350;
-  --border: #ddceaf;
-  --accent: #a8451c;
-  --accent-contrast: #fff8f0;
-  --accent-soft: #f2ddc9;
-  --danger: #a13327;
-  --danger-soft: #f6e2dc;
-  --ok: #4a7a44;
-  --ok-soft: #e5ecdf;
-  --code-bg: #251d13;
-  --code-text: #ecdec2;
-  --code-comment: #a4926e;
+  --bg: #ffffff;
+  --bg-raise: #ffffff;
+  --bg-inset: #f4f5f6;
+  --text: #111214;
+  --text-dim: #6b6f76;
+  --border: #e3e5e8;
+  --accent: #0d5fef;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e8f0fe;
+  --danger: #d92d20;
+  --danger-soft: #fdeceb;
+  --ok: #059669;
+  --ok-soft: #e3f6ee;
+  --code-bg: #16181c;
+  --code-text: #e7e8ea;
+  --code-comment: #8b8f96;
   --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, Menlo, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1c1710;
-    --bg-raise: #262019;
-    --bg-inset: #2d271d;
-    --text: #f0e4cd;
-    --text-dim: #ac9c7d;
-    --border: #3c3325;
-    --accent: #e08246;
-    --accent-contrast: #201207;
-    --accent-soft: #402a17;
-    --danger: #e58e80;
-    --danger-soft: #3a2019;
-    --ok: #8fbb7f;
-    --ok-soft: #263021;
-    --code-bg: #14100a;
-    --code-text: #e9dbbf;
-    --code-comment: #8c7c5c;
+    --bg: #0c0d0f;
+    --bg-raise: #16181b;
+    --bg-inset: #1c1e22;
+    --text: #f2f3f4;
+    --text-dim: #9a9ea5;
+    --border: #2a2d32;
+    --accent: #4f86ff;
+    --accent-contrast: #0c0d0f;
+    --accent-soft: #1a2c4d;
+    --danger: #ff6b61;
+    --danger-soft: #3a1815;
+    --ok: #34d399;
+    --ok-soft: #113228;
+    --code-bg: #0a0b0d;
+    --code-text: #e7e8ea;
+    --code-comment: #7d8087;
   }
 }
 
