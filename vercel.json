@@ -1,0 +1,10 @@
+{
+  "builds": [
+    {
+      "src": "web/api/index.py",
+      "use": "@vercel/python",
+      "config": { "includeFiles": ["web/app/**", "web/static/**"] }
+    }
+  ],
+  "routes": [{ "src": "/(.*)", "dest": "web/api/index.py" }]
+}

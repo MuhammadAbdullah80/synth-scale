@@ -1,0 +1,5 @@
+# Vercel's Python builder resolves local-path requirements relative to this
+# file's own directory (not the pip process's cwd), so the relative path to
+# datagen_pkg below works regardless of where Vercel's build actually runs.
+fastapi>=0.115
+../../datagen_pkg[postgres]
