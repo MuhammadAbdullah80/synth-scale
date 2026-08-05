@@ -53,6 +53,7 @@ python -m pytest web/tests -q
 | `POST /api/connect` | `{db_url, rows=50, seed=42, format: "preview"\|"sql"\|"csv"}`. Same response shapes as `/api/generate`, but the schema comes from introspecting `db_url` instead of parsing DDL text. Read-only; 503 if the deploy doesn't have `psycopg2-binary` installed. |
 | `POST /api/waitlist` | `{email}` → `{ok, added, count}`. Appends `{email, ts, ua}` to `data/waitlist.jsonl`, deduped by email. No other PII. |
 | `GET /api/waitlist/count` | `{count}` for social proof. |
+| `POST /api/contact` | `{name?, email, message}` → `{ok: true}`. Appends to `data/contact_messages.jsonl` (durable regardless of email config), then best-effort sends an SMTP notification if `SYNTH_SCALE_SMTP_*` env vars are set. Rate-limited separately (5/hour). |
 | `GET /api/health` | liveness. |
 | `GET /` | static frontend. |
 
@@ -173,6 +174,9 @@ Railway and Fly work with the same Dockerfile (`fly launch` detects it; set
 | `SYNTH_SCALE_DB_RATE_LIMIT` | `3` | `/api/connect` calls per hour per IP |
 | `SYNTH_SCALE_DB_CONNECT_TIMEOUT` | `5` | libpq TCP connect timeout (s) for `/api/connect` |
 | `SYNTH_SCALE_DB_TIMEOUT` | `12` | wall-time budget around introspection (s) for `/api/connect` |
+| `SYNTH_SCALE_CONTACT_RATE_LIMIT` | `5` | `/api/contact` submissions per hour per IP |
+| `SYNTH_SCALE_SMTP_HOST` / `_PORT` (587) / `_USER` / `_PASS` | unset | SMTP credentials for the contact form's email notification. Unset means messages are still stored in `data/contact_messages.jsonl`, just not emailed. A Gmail account works with an [App Password](https://myaccount.google.com/apppasswords) (needs 2-Step Verification on) as `_USER`/`_PASS`, `smtp.gmail.com` as `_HOST`. |
+| `SYNTH_SCALE_CONTACT_TO` | `abdullahk80808080@gmail.com` | where contact-form notifications are sent |
 
 ## Layout
 
@@ -185,8 +189,9 @@ web/
     dbsafety.py    # SSRF guard: rejects private/internal hosts before connecting
     ratelimit.py   # in-memory sliding window limiter
     waitlist.py    # JSONL waitlist store, dedupe by email
+    contact.py     # contact form: JSONL store + best-effort SMTP notification
   static/          # index.html + style.css + app.js (vanilla, self-contained)
-  tests/test_api.py, test_connect.py
-  data/            # waitlist.jsonl (created at runtime; gitignored territory)
+  tests/test_api.py, test_connect.py, test_contact.py
+  data/            # waitlist.jsonl, contact_messages.jsonl (created at runtime; gitignored territory)
   Dockerfile       # build from REPO ROOT: docker build -f web/Dockerfile .
 ```

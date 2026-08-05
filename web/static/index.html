@@ -17,6 +17,7 @@
       <a href="#playground">Playground</a>
       <a href="#why">Why</a>
       <a href="#cli">CLI</a>
+      <a href="#contact">Contact</a>
       <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">GitHub</a>
     </nav>
   </div>
@@ -152,6 +153,31 @@ $ synth-scale --ddl schema.sql --rows 1000 --seed 42 --format sql --out ./seed
 <span class="c"># point it at a live database instead of a .sql file</span>
 $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
       <a class="btn btn-ghost" href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">Read the docs on GitHub &rarr;</a>
+    </div>
+  </section>
+
+  <!-- ============================ CONTACT ============================ -->
+  <section id="contact" class="contact">
+    <div class="wrap">
+      <p class="kicker">05 &middot; Contact</p>
+      <h2>Send us a message</h2>
+      <p class="section-sub">Questions, bug reports, feature requests. Goes straight to the maintainer.</p>
+      <form class="contact-form" id="contact-form">
+        <label class="contact-field">
+          <span>Name <em>(optional)</em></span>
+          <input type="text" id="contact-name" name="name" maxlength="100" autocomplete="name">
+        </label>
+        <label class="contact-field">
+          <span>Email</span>
+          <input type="email" id="contact-email" name="email" required autocomplete="email" maxlength="254">
+        </label>
+        <label class="contact-field">
+          <span>Message</span>
+          <textarea id="contact-message" name="message" rows="5" required maxlength="4000"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary" id="contact-submit">Send message</button>
+        <p class="contact-msg" id="contact-status" role="status"></p>
+      </form>
     </div>
   </section>
 

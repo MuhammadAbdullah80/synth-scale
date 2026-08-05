@@ -225,6 +225,22 @@ td.null { color: var(--text-dim); font-style: italic; }
 }
 .codeblock .c { color: var(--code-comment); }
 
+/* ---- contact ---- */
+.contact { border-top: 1px solid var(--border); }
+.contact-form { display: flex; flex-direction: column; gap: 1rem; max-width: 34rem; }
+.contact-field { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.88rem; color: var(--text-dim); }
+.contact-field em { font-style: normal; color: var(--text-dim); }
+.contact-field input, .contact-field textarea {
+  font-family: var(--sans); font-size: 0.95rem; color: var(--text);
+  background: var(--bg-raise); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.55rem 0.8rem; resize: vertical;
+}
+.contact-field input:focus, .contact-field textarea:focus {
+  outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent;
+}
+.contact-msg { margin: 0; font-size: 0.9rem; color: var(--ok); min-height: 1.2em; }
+.contact-msg.err { color: var(--danger); }
+
 /* ---- bottom cta / footer ---- */
 .bottom-cta { background: var(--bg-inset); border-top: 1px solid var(--border); }
 .site-footer { border-top: 1px solid var(--border); padding: 1.5rem 0 2.5rem; }

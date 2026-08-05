@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import service
+from . import contact, service
 from .ratelimit import SlidingWindowLimiter
 from .waitlist import Waitlist, valid_email
 
@@ -65,9 +65,16 @@ RATE_WINDOW_SECONDS = 3600.0
 # whatever host they typed), so it gets its own, much tighter limit.
 DB_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_DB_RATE_LIMIT", "3"))
 
+# The contact form triggers a real outbound email send (once SMTP is
+# configured), so it gets its own tight limit -- same spirit as db_limiter,
+# capping abuse of whatever mailbox SYNTH_SCALE_SMTP_USER is.
+CONTACT_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_CONTACT_RATE_LIMIT", "5"))
+
 limiter = SlidingWindowLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 db_limiter = SlidingWindowLimiter(limit=DB_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
+contact_limiter = SlidingWindowLimiter(limit=CONTACT_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 waitlist = Waitlist(DATA_DIR / "waitlist.jsonl")
+contact_store = contact.ContactStore(DATA_DIR / "contact_messages.jsonl")
 
 app = FastAPI(title="Synth-Scale", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -189,6 +196,12 @@ class ConnectRequest(BaseModel):
 
 class WaitlistRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
+
+
+class ContactRequest(BaseModel):
+    name: str = Field(default="", max_length=100)
+    email: str = Field(min_length=3, max_length=254)
+    message: str = Field(min_length=1, max_length=4000)
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +333,33 @@ def waitlist_add(req: WaitlistRequest, request: Request):
 @app.get("/api/waitlist/count")
 def waitlist_count():
     return {"count": waitlist.count}
+
+
+@app.post("/api/contact")
+def contact_submit(req: ContactRequest, request: Request):
+    allowed, retry_after = contact_limiter.check(client_ip(request))
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": f"Too many messages. Try again in ~{max(retry_after // 60, 1)} min."
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    email = req.email.strip().lower()
+    if not valid_email(email):
+        raise HTTPException(status_code=422, detail="That doesn't look like a valid email address.")
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Message can't be empty.")
+    name = req.name.strip()
+
+    # Persisted first (durable) -- the email send below is best-effort on
+    # top of that, so a transient SMTP hiccup never loses the message.
+    contact_store.add(name, email, message, request.headers.get("user-agent", ""))
+    contact.send_contact_email(name, email, message)
+    return {"ok": True}
 
 
 # Static frontend at / (mounted last so /api/* wins).

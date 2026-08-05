@@ -279,6 +279,39 @@ for (const form of document.querySelectorAll("[data-waitlist]")) {
   });
 }
 
+/* ---- contact form ---- */
+const contactForm = $("#contact-form");
+if (contactForm) {
+  contactForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const submitBtn = $("#contact-submit");
+    const status = $("#contact-status");
+    status.classList.remove("err");
+    status.textContent = "Sending...";
+    submitBtn.disabled = true;
+    try {
+      const resp = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: $("#contact-name").value,
+          email: $("#contact-email").value,
+          message: $("#contact-message").value,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || "Something went wrong.");
+      status.textContent = "Message sent. Thanks, we'll get back to you.";
+      contactForm.reset();
+    } catch (e) {
+      status.classList.add("err");
+      status.textContent = e.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 function updateCount(n) {
   const el = document.querySelector("[data-waitlist-count]");
   if (el && n >= 5) {
