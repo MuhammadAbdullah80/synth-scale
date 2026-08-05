@@ -1,5 +1,15 @@
-# Vercel's Python builder resolves local-path requirements relative to this
-# file's own directory (not the pip process's cwd), so the relative path to
-# datagen_pkg below works regardless of where Vercel's build actually runs.
+# Vercel's build step can't see sibling directories outside web/api/, so
+# `datagen` is imported as plain source via sys.path (see index.py) rather
+# than pip-installed from datagen_pkg. These are datagen's actual runtime
+# dependencies, copied from datagen_pkg/pyproject.toml's [project.dependencies]
+# and [project.optional-dependencies].postgres -- keep in sync if that
+# pyproject.toml's dependency list changes.
 fastapi>=0.115
-../../datagen_pkg[postgres]
+sqlglot>=30.0
+networkx>=3.6
+Faker>=40.0
+SQLAlchemy>=2.0
+simpleeval>=1.0
+typer>=0.12
+rich>=13
+psycopg2-binary

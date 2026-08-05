@@ -3,7 +3,7 @@
     {
       "src": "web/api/index.py",
       "use": "@vercel/python",
-      "config": { "includeFiles": ["web/app/**", "web/static/**"] }
+      "config": { "includeFiles": ["web/app/**", "web/static/**", "datagen_pkg/datagen/**"] }
     }
   ],
   "routes": [{ "src": "/(.*)", "dest": "web/api/index.py" }]
