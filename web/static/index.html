@@ -26,6 +26,7 @@
   <!-- ============================ HERO ============================ -->
   <section class="hero">
     <div class="wrap">
+      <p class="kicker">Open source &middot; Postgres &middot; Supabase</p>
       <h1>Paste your schema.<br>Get realistic, perfectly-linked data.</h1>
       <p class="tagline">Deterministic. Correct on the first run. Every foreign key resolves,
       every CHECK passes, every run with the same seed is byte-identical. No LLM in the data path.</p>
@@ -47,6 +48,7 @@
   <!-- ========================= PLAYGROUND ========================= -->
   <section id="playground" class="playground">
     <div class="wrap">
+      <p class="kicker">01 &middot; Try it</p>
       <h2>Playground</h2>
 
       <div class="source-tabs" role="tablist">
@@ -98,33 +100,44 @@
   <!-- ============================ WHY ============================= -->
   <section id="why" class="why">
     <div class="wrap">
+      <p class="kicker">02 &middot; Why</p>
       <h2>Why not just ask Claude for a seed script?</h2>
-      <div class="cards">
-        <article class="card">
-          <h3>Reproducible</h3>
-          <p>An LLM writes you a <em>probably</em>-correct script that changes every time you re-prompt.
-          Synth-Scale is seeded end to end: same seed, same bytes, today, tomorrow, in CI. You can hash
-          the output and assert on it.</p>
-        </article>
-        <article class="card">
-          <h3>Constraint-correct at scale</h3>
-          <p>Tables are generated in FK dependency order, so every foreign key resolves, composite keys stay
-          unique, and CHECKs are satisfied <em>by construction</em>, then an independent validator re-checks
-          every constraint. 50,000 rows behave exactly like 50.</p>
-        </article>
-        <article class="card">
-          <h3>Coherent data</h3>
-          <p>Not a random grid: <code>updated_at&nbsp;&ge;&nbsp;created_at</code>, orders newer than their
-          users, a <code>shipped</code> order has a <code>shipped_at</code>, Karachi stays in Pakistan, and a
-          few power users own most of the orders, like real production data.</p>
-        </article>
-      </div>
+      <ol class="why-list">
+        <li class="why-item">
+          <span class="why-num">01</span>
+          <div>
+            <h3>Reproducible</h3>
+            <p>An LLM writes you a <em>probably</em>-correct script that changes every time you re-prompt.
+            Synth-Scale is seeded end to end: same seed, same bytes, today, tomorrow, in CI. You can hash
+            the output and assert on it.</p>
+          </div>
+        </li>
+        <li class="why-item">
+          <span class="why-num">02</span>
+          <div>
+            <h3>Constraint-correct at scale</h3>
+            <p>Tables are generated in FK dependency order, so every foreign key resolves, composite keys stay
+            unique, and CHECKs are satisfied <em>by construction</em>, then an independent validator re-checks
+            every constraint. 50,000 rows behave exactly like 50.</p>
+          </div>
+        </li>
+        <li class="why-item">
+          <span class="why-num">03</span>
+          <div>
+            <h3>Coherent data</h3>
+            <p>Not a random grid: <code>updated_at&nbsp;&ge;&nbsp;created_at</code>, orders newer than their
+            users, a <code>shipped</code> order has a <code>shipped_at</code>, Karachi stays in Pakistan, and a
+            few power users own most of the orders, like real production data.</p>
+          </div>
+        </li>
+      </ol>
     </div>
   </section>
 
   <!-- ============================ CLI ============================= -->
   <section id="cli" class="cli">
     <div class="wrap">
+      <p class="kicker">03 &middot; CLI</p>
       <h2>The real tool is the CLI</h2>
       <p class="section-sub">This page is the demo. The CLI parses your migrations, introspects live Supabase/Postgres
       schemas, and loads 50k coherent rows straight into your database. No caps, fully offline.</p>
@@ -145,6 +158,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
   <!-- ========================= BOTTOM CTA ========================= -->
   <section class="bottom-cta">
     <div class="wrap">
+      <p class="kicker">04 &middot; Stay in the loop</p>
       <h2>Get launch updates</h2>
       <p class="section-sub">PyPI release, Supabase introspection, CI data contracts. One email when it ships. Nothing else.</p>
       <form class="waitlist-form" data-waitlist>
