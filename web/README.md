@@ -177,14 +177,28 @@ has been deployed to so far**, just in different ways:
 
 Options, in order of honesty:
 
+- **Free + durable (recommended, implemented):** set
+  `SYNTH_SCALE_STORAGE_DB_URL` to a Postgres connection string — a Supabase
+  Session/Transaction Pooler URL works well (IPv4, free on every tier, and
+  it's the pattern Supabase's pooler is built for: many short-lived
+  connections from a serverless function). All three stores
+  (`waitlist`, `contact_store`, `analytics_store`) switch to Postgres
+  tables automatically (`ss_waitlist`, `ss_contact_messages`,
+  `ss_analytics_events` — `CREATE TABLE IF NOT EXISTS`'d on startup, so
+  there's no manual migration step). See `storage.py`. This is a separate,
+  operator-owned connection string from the one end users paste into
+  "Connect to Supabase" on the playground — that one is per-request and
+  never stored; this one is your own config, read once at startup.
+  Verified end to end: wrote through one process, killed it, started a
+  completely fresh process against the same DB, confirmed the data was
+  still there.
+  If this env var is unreachable at startup (bad credentials, network
+  blip), the app logs a warning and falls back to local JSONL rather than
+  refusing to boot; if psycopg2 isn't installed at all, it fails loudly at
+  startup instead of silently ignoring the env var.
 - **Free + zero ops, no code change:** swap the waitlist/contact forms'
   `fetch` calls to a hosted form (Formspree/Tally) and keep this app's API
   for the playground and `/api/stats` only.
-- **Free + durable, moderate effort:** point this app at a Postgres
-  database you already control (e.g. the Supabase project used for
-  "Connect to Supabase" testing) and swap the three JSONL stores for a
-  couple of tables. Not implemented yet — ask if you want this built; it's
-  the actual fix for "where do these get stored durably."
 - **Paid disk:** Render persistent disk or a Fly.io volume mounted at
   `/srv/web/data` (set `SYNTH_SCALE_DATA_DIR=/srv/web/data`). Doesn't apply
   to Vercel regardless of paid tier — Vercel functions have no persistent
@@ -210,8 +224,9 @@ full redeploy unless you also mount a volume).
    waitlist signups, and contact messages, all pulled live from
    `analytics.jsonl` / `waitlist.jsonl` / `contact_messages.jsonl`.
 
-Same caveat as above applies: on the current Vercel deployment these
-numbers reset unpredictably because the underlying files live in `/tmp`.
+Same caveat as above applies unless `SYNTH_SCALE_STORAGE_DB_URL` is also
+set: on the current Vercel deployment, without it, these numbers reset
+unpredictably because the underlying files live in `/tmp`.
 
 ### Env knobs
 
@@ -228,6 +243,7 @@ numbers reset unpredictably because the underlying files live in `/tmp`.
 | `SYNTH_SCALE_CONTACT_TO` | `abdullahk80808080@gmail.com` | where contact-form notifications are sent |
 | `SYNTH_SCALE_TRACK_RATE_LIMIT` | `120` | `/api/track` events per hour per IP |
 | `SYNTH_SCALE_STATS_KEY` | unset | shared secret required (as an `X-Stats-Key` header) to read `/api/stats`. Unset = the endpoint 404s unconditionally, i.e. stats are off by default. |
+| `SYNTH_SCALE_STORAGE_DB_URL` | unset | Postgres connection string for durable waitlist/contact/analytics storage (see `storage.py` and the persistence section above). Unset = local JSONL files under `SYNTH_SCALE_DATA_DIR`. |
 
 ## Layout
 
@@ -242,6 +258,7 @@ web/
     waitlist.py    # JSONL waitlist store, dedupe by email
     contact.py     # contact form: JSONL store + best-effort SMTP notification
     analytics.py   # pageview/click JSONL store + aggregation for /api/stats
+    storage.py     # optional Postgres-backed swap-in for waitlist/contact/analytics
   static/          # index.html + style.css + app.js + stats.html/stats.js (vanilla, self-contained)
   tests/test_api.py, test_connect.py, test_contact.py, test_analytics.py
   data/            # waitlist.jsonl, contact_messages.jsonl, analytics.jsonl (created at runtime; gitignored territory)

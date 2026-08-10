@@ -18,17 +18,20 @@ Security posture:
 - Request bodies are capped (413) before they reach any handler.
 - Security headers (CSP self-only, nosniff, frame-deny, ...) on every
   response.
-- No auth, no accounts, no cookies. Stored data: the waitlist JSONL (email,
-  timestamp, user-agent), the contact-message JSONL, and a first-party
-  analytics JSONL (pageview/click events tagged with a random per-tab
-  session id, no IP, no cross-site tracking, no third party involved --
-  see analytics.py). /api/stats exposes aggregates from that log, gated
-  behind SYNTH_SCALE_STATS_KEY.
+- No auth, no accounts, no cookies. Stored data: the waitlist, contact
+  messages, and first-party analytics (pageview/click events tagged with a
+  random per-tab session id, no IP, no cross-site tracking, no third party
+  involved -- see analytics.py). /api/stats exposes aggregates from that
+  data, gated behind SYNTH_SCALE_STATS_KEY. All three persist to local
+  JSONL files by default, or to Postgres tables if SYNTH_SCALE_STORAGE_DB_URL
+  is set (see storage.py) -- the latter is what actually survives on a
+  platform like Vercel where the filesystem doesn't.
 """
 from __future__ import annotations
 
 import os
 import secrets
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -48,13 +51,15 @@ try:
     # at connect time, so importing service_db alone would succeed even
     # without the [postgres] extra. Check for psycopg2 explicitly so a
     # deploy missing it gets a clean 503 up front instead of every request
-    # failing deep inside a connection attempt.
+    # failing deep inside a connection attempt. storage.py needs the same
+    # driver, so it's gated behind the same flag.
     import psycopg2  # noqa: F401
 
-    from . import service_db
+    from . import service_db, storage
     DB_CONNECT_AVAILABLE = True
 except ImportError:
     service_db = None
+    storage = None
     DB_CONNECT_AVAILABLE = False
 
 WEB_DIR = Path(__file__).resolve().parent.parent
@@ -86,14 +91,47 @@ TRACK_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_TRACK_RATE_LIMIT", "120"))
 # unconditionally -- there is no "stats are open" default.
 STATS_KEY = os.environ.get("SYNTH_SCALE_STATS_KEY", "")
 
+# Operator-owned storage backend for waitlist/contact/analytics. Unset (the
+# default) keeps everything on local JSONL files under DATA_DIR -- correct
+# for local dev and any platform with a real persistent filesystem. Set
+# this to a Postgres connection string (a Supabase pooler URL works well)
+# to make that data actually durable on platforms like Vercel where the
+# filesystem doesn't survive between invocations. This is a separate,
+# operator-configured connection string from the one end users paste into
+# "Connect to Supabase" -- see storage.py's module docstring.
+STORAGE_DB_URL = os.environ.get("SYNTH_SCALE_STORAGE_DB_URL", "")
+
 limiter = SlidingWindowLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 db_limiter = SlidingWindowLimiter(limit=DB_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 contact_limiter = SlidingWindowLimiter(limit=CONTACT_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 track_limiter = SlidingWindowLimiter(limit=TRACK_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 stats_limiter = SlidingWindowLimiter(limit=20, window_seconds=RATE_WINDOW_SECONDS)
-waitlist = Waitlist(DATA_DIR / "waitlist.jsonl")
-contact_store = contact.ContactStore(DATA_DIR / "contact_messages.jsonl")
-analytics_store = analytics.AnalyticsStore(DATA_DIR / "analytics.jsonl")
+
+waitlist = contact_store = analytics_store = None
+if STORAGE_DB_URL:
+    if not DB_CONNECT_AVAILABLE:
+        raise RuntimeError(
+            "SYNTH_SCALE_STORAGE_DB_URL is set but psycopg2 isn't installed "
+            "-- install the [postgres] extra or unset the env var."
+        )
+    try:
+        storage.ensure_schema(STORAGE_DB_URL)
+        waitlist = storage.WaitlistDB(STORAGE_DB_URL)
+        contact_store = storage.ContactDB(STORAGE_DB_URL)
+        analytics_store = storage.AnalyticsDB(STORAGE_DB_URL)
+    except Exception as exc:  # pragma: no cover - depends on live network/DB
+        # A misconfigured or momentarily-unreachable storage DB shouldn't take
+        # the whole site down -- fall back to (locally durable, if the
+        # filesystem is) JSONL rather than failing every request at startup.
+        print(
+            f"[synth-scale] SYNTH_SCALE_STORAGE_DB_URL set but unreachable at "
+            f"startup ({exc}); falling back to local JSONL storage.",
+            file=sys.stderr,
+        )
+if waitlist is None:
+    waitlist = Waitlist(DATA_DIR / "waitlist.jsonl")
+    contact_store = contact.ContactStore(DATA_DIR / "contact_messages.jsonl")
+    analytics_store = analytics.AnalyticsStore(DATA_DIR / "analytics.jsonl")
 
 app = FastAPI(title="Synth-Scale", docs_url=None, redoc_url=None, openapi_url=None)
 
