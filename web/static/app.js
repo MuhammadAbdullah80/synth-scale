@@ -354,6 +354,46 @@ if (contactForm) {
   });
 }
 
+/* ---- feedback survey ---- */
+const feedbackForm = $("#feedback-form");
+if (feedbackForm) {
+  feedbackForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const submitBtn = $("#feedback-submit");
+    const status = $("#feedback-status");
+    status.classList.remove("err");
+    const wouldUse = feedbackForm.querySelector('input[name="would_use"]:checked');
+    if (!wouldUse) {
+      status.classList.add("err");
+      status.textContent = "Pick yes, maybe, or no first.";
+      return;
+    }
+    status.textContent = "Sending...";
+    submitBtn.disabled = true;
+    try {
+      const resp = await fetch("/api/survey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          would_use: wouldUse.value,
+          use_case: $("#feedback-use-case").value,
+          blockers: $("#feedback-blockers").value,
+          email: $("#feedback-email").value,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || "Something went wrong.");
+      status.textContent = "Thanks, that's genuinely useful to know.";
+      feedbackForm.reset();
+    } catch (e) {
+      status.classList.add("err");
+      status.textContent = e.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 function updateCount(n) {
   const el = document.querySelector("[data-waitlist-count]");
   if (el && n >= 5) {

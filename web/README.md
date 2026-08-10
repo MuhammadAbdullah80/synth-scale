@@ -2,8 +2,9 @@
 
 Landing page + waitlist + a **capped** try-it playground for the
 [synth-scale](../datagen_pkg) engine. The CLI is the product; this site exists
-to capture signups and let people who won't install a CLI paste a schema,
-preview coherent data, and download SQL/CSV.
+to capture signups, collect "would you actually use this" feedback, and let
+people who won't install a CLI paste a schema, preview coherent data, and
+download SQL/CSV.
 
 - **FastAPI** backend (`app/main.py`) calling the engine in-process
   (`parse_ddl → run_engine → validate`), all output built in memory.
@@ -11,8 +12,8 @@ preview coherent data, and download SQL/CSV.
   third-party trackers, no cookies. First-party pageview/click counts only
   (`POST /api/track`, key-gated `GET /api/stats`). Trivially replaceable
   with a Next.js frontend later; the API contract is `POST /api/generate`,
-  `POST /api/connect`, `POST /api/waitlist`, `POST /api/contact`, and
-  `POST /api/track`.
+  `POST /api/connect`, `POST /api/waitlist`, `POST /api/contact`,
+  `POST /api/track`, and `POST /api/survey`.
 - Two schema sources: paste DDL text (`/api/generate` — parsed only via
   sqlglot, never executed against anything) or **Connect to Supabase**
   (`/api/connect` — introspects a caller-supplied Postgres connection string
@@ -57,7 +58,8 @@ python -m pytest web/tests -q
 | `GET /api/waitlist/count` | `{count}` for social proof. |
 | `POST /api/contact` | `{name?, email, message}` → `{ok: true}`. Appends to `data/contact_messages.jsonl` (durable regardless of email config), then best-effort sends an SMTP notification if `SYNTH_SCALE_SMTP_*` env vars are set. Rate-limited separately (5/hour). |
 | `POST /api/track` | `{event: "pageview"\|"click", path, target?, session_id?}` → `{ok: true}`. Fired automatically by `app.js` on every page load and on every click of an element tagged `data-track="..."`. Appends to `data/analytics.jsonl`. No IP is stored; `session_id` is a random id the client keeps in `sessionStorage` (not a cookie), purely so `/api/stats` can report unique sessions. Rate-limited (120/hour/IP by default). |
-| `GET /api/stats` | Key-gated (`X-Stats-Key` header, must equal `SYNTH_SCALE_STATS_KEY`) → `{pageviews, unique_sessions, clicks_by_target, pageviews_by_path, waitlist_count, contact_messages}`. 404s (not 401/403) for a missing/wrong key, and unconditionally if `SYNTH_SCALE_STATS_KEY` isn't set. See [Stats dashboard](#stats-dashboard-apistats). |
+| `POST /api/survey` | `{would_use: "yes"\|"maybe"\|"no", use_case?, blockers?, email?}` → `{ok: true}`. The "would you actually use this" feedback form. Only `would_use` is required; `email` is validated only if non-empty. Appends to `data/survey.jsonl`. Rate-limited separately (5/hour). |
+| `GET /api/stats` | Key-gated (`X-Stats-Key` header, must equal `SYNTH_SCALE_STATS_KEY`) → `{pageviews, unique_sessions, clicks_by_target, pageviews_by_path, waitlist_count, contact_messages, survey: {total, would_use: {yes, maybe, no}, use_case_counts}}`. 404s (not 401/403) for a missing/wrong key, and unconditionally if `SYNTH_SCALE_STATS_KEY` isn't set. See [Stats dashboard](#stats-dashboard-apistats). |
 | `GET /api/health` | liveness. |
 | `GET /` | static frontend. |
 | `GET /stats.html` | private stats dashboard UI (not linked from the site). Prompts for the stats key once, keeps it in `localStorage`, calls `/api/stats`. |
@@ -76,6 +78,7 @@ python -m pytest web/tests -q
 | Rate limit (`/api/generate`) | 10 / hour / IP | 429 + `Retry-After` |
 | Rate limit (`/api/connect`) | 3 / hour / IP | 429 + `Retry-After` |
 | Rate limit (`/api/track`) | 120 / hour / IP | 429 + `Retry-After` |
+| Rate limit (`/api/survey`) | 5 / hour / IP | 429 + `Retry-After` |
 | Rate limit (`/api/stats`) | 20 / hour / IP | 429 + `Retry-After` |
 | DB connect timeout | 5 s | 422 |
 | DB introspection wall time | 12 s | 408 |
@@ -158,8 +161,8 @@ waitlist note).
    (`EXPOSE`), or set `PORT` and override the start command with
    `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 
-**⚠ Waitlist / contact / analytics persistence:** `waitlist.jsonl`,
-`contact_messages.jsonl`, and `analytics.jsonl` all live under
+**⚠ Waitlist / contact / analytics / survey persistence:** `waitlist.jsonl`,
+`contact_messages.jsonl`, `analytics.jsonl`, and `survey.jsonl` all live under
 `SYNTH_SCALE_DATA_DIR` (default `web/data`) on whatever filesystem the
 process sees — which is **ephemeral on every free-tier platform this app
 has been deployed to so far**, just in different ways:
@@ -181,11 +184,11 @@ Options, in order of honesty:
   `SYNTH_SCALE_STORAGE_DB_URL` to a Postgres connection string — a Supabase
   Session/Transaction Pooler URL works well (IPv4, free on every tier, and
   it's the pattern Supabase's pooler is built for: many short-lived
-  connections from a serverless function). All three stores
-  (`waitlist`, `contact_store`, `analytics_store`) switch to Postgres
-  tables automatically (`ss_waitlist`, `ss_contact_messages`,
-  `ss_analytics_events` — `CREATE TABLE IF NOT EXISTS`'d on startup, so
-  there's no manual migration step). See `storage.py`. This is a separate,
+  connections from a serverless function). All four stores
+  (`waitlist`, `contact_store`, `analytics_store`, `survey_store`) switch to
+  Postgres tables automatically (`ss_waitlist`, `ss_contact_messages`,
+  `ss_analytics_events`, `ss_survey` — `CREATE TABLE IF NOT EXISTS`'d on
+  startup, so there's no manual migration step). See `storage.py`. This is a separate,
   operator-owned connection string from the one end users paste into
   "Connect to Supabase" on the playground — that one is per-request and
   never stored; this one is your own config, read once at startup.
@@ -221,8 +224,10 @@ full redeploy unless you also mount a volume).
    `X-Stats-Key` header, never a URL query param, so it doesn't end up in
    server/proxy access logs or browser history.
 3. See pageviews, unique sessions, clicks by target, pageviews by path,
-   waitlist signups, and contact messages, all pulled live from
-   `analytics.jsonl` / `waitlist.jsonl` / `contact_messages.jsonl`.
+   waitlist signups, contact messages, and the survey breakdown (would-use
+   yes/maybe/no counts plus mentioned use cases), all pulled live from
+   `analytics.jsonl` / `waitlist.jsonl` / `contact_messages.jsonl` /
+   `survey.jsonl`.
 
 Same caveat as above applies unless `SYNTH_SCALE_STORAGE_DB_URL` is also
 set: on the current Vercel deployment, without it, these numbers reset
@@ -242,6 +247,7 @@ unpredictably because the underlying files live in `/tmp`.
 | `SYNTH_SCALE_SMTP_HOST` / `_PORT` (587) / `_USER` / `_PASS` | unset | SMTP credentials for the contact form's email notification. Unset means messages are still stored in `data/contact_messages.jsonl`, just not emailed. A Gmail account works with an [App Password](https://myaccount.google.com/apppasswords) (needs 2-Step Verification on) as `_USER`/`_PASS`, `smtp.gmail.com` as `_HOST`. |
 | `SYNTH_SCALE_CONTACT_TO` | `abdullahk80808080@gmail.com` | where contact-form notifications are sent |
 | `SYNTH_SCALE_TRACK_RATE_LIMIT` | `120` | `/api/track` events per hour per IP |
+| `SYNTH_SCALE_SURVEY_RATE_LIMIT` | `5` | `/api/survey` submissions per hour per IP |
 | `SYNTH_SCALE_STATS_KEY` | unset | shared secret required (as an `X-Stats-Key` header) to read `/api/stats`. Unset = the endpoint 404s unconditionally, i.e. stats are off by default. |
 | `SYNTH_SCALE_STORAGE_DB_URL` | unset | Postgres connection string for durable waitlist/contact/analytics storage (see `storage.py` and the persistence section above). Unset = local JSONL files under `SYNTH_SCALE_DATA_DIR`. |
 
@@ -258,9 +264,10 @@ web/
     waitlist.py    # JSONL waitlist store, dedupe by email
     contact.py     # contact form: JSONL store + best-effort SMTP notification
     analytics.py   # pageview/click JSONL store + aggregation for /api/stats
-    storage.py     # optional Postgres-backed swap-in for waitlist/contact/analytics
+    survey.py      # "would you use this" feedback JSONL store + aggregation
+    storage.py     # optional Postgres-backed swap-in for waitlist/contact/analytics/survey
   static/          # index.html + style.css + app.js + stats.html/stats.js (vanilla, self-contained)
-  tests/test_api.py, test_connect.py, test_contact.py, test_analytics.py
-  data/            # waitlist.jsonl, contact_messages.jsonl, analytics.jsonl (created at runtime; gitignored territory)
+  tests/test_api.py, test_connect.py, test_contact.py, test_analytics.py, test_survey.py
+  data/            # waitlist.jsonl, contact_messages.jsonl, analytics.jsonl, survey.jsonl (created at runtime; gitignored territory)
   Dockerfile       # build from REPO ROOT: docker build -f web/Dockerfile .
 ```

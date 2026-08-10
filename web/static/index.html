@@ -17,6 +17,7 @@
       <a href="#playground" data-track="nav-playground">Playground</a>
       <a href="#why" data-track="nav-why">Why</a>
       <a href="#cli" data-track="nav-cli">CLI</a>
+      <a href="#feedback" data-track="nav-feedback">Feedback</a>
       <a href="#contact" data-track="nav-contact">Contact</a>
       <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener" data-track="nav-github">GitHub</a>
     </nav>
@@ -156,6 +157,49 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
     </div>
   </section>
 
+  <!-- ========================== FEEDBACK =========================== -->
+  <section id="feedback" class="feedback">
+    <div class="wrap">
+      <p class="kicker">04 &middot; Feedback</p>
+      <h2>Would you actually use this?</h2>
+      <p class="section-sub">Two questions, no email required. Tells us whether to keep building this
+      or go do something else with our time.</p>
+      <form class="feedback-form" id="feedback-form">
+        <fieldset class="feedback-choice">
+          <legend>Would you use Synth-Scale?</legend>
+          <label class="choice-pill">
+            <input type="radio" name="would_use" value="yes" required>
+            <span>Yes</span>
+          </label>
+          <label class="choice-pill">
+            <input type="radio" name="would_use" value="maybe">
+            <span>Maybe</span>
+          </label>
+          <label class="choice-pill">
+            <input type="radio" name="would_use" value="no">
+            <span>No</span>
+          </label>
+        </fieldset>
+        <label class="feedback-field">
+          <span>What would you use it for? <em>(optional)</em></span>
+          <input type="text" id="feedback-use-case" name="use_case" maxlength="1000"
+            placeholder="CI test fixtures, demos, onboarding data, ...">
+        </label>
+        <label class="feedback-field">
+          <span>What would stop you from using it? <em>(optional)</em></span>
+          <textarea id="feedback-blockers" name="blockers" rows="3" maxlength="1000"
+            placeholder="Missing a feature, don't trust the data, already have a tool, ..."></textarea>
+        </label>
+        <label class="feedback-field">
+          <span>Email <em>(optional, if you want a reply)</em></span>
+          <input type="email" id="feedback-email" name="email" autocomplete="email" maxlength="254">
+        </label>
+        <button type="submit" class="btn btn-primary" id="feedback-submit" data-track="feedback-submit">Send feedback</button>
+        <p class="feedback-msg" id="feedback-status" role="status"></p>
+      </form>
+    </div>
+  </section>
+
   <!-- ============================ CONTACT ============================ -->
   <section id="contact" class="contact">
     <div class="wrap">
@@ -184,7 +228,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
   <!-- ========================= BOTTOM CTA ========================= -->
   <section class="bottom-cta">
     <div class="wrap">
-      <p class="kicker">04 &middot; Stay in the loop</p>
+      <p class="kicker">06 &middot; Stay in the loop</p>
       <h2>Get launch updates</h2>
       <p class="section-sub">PyPI release, Supabase introspection, CI data contracts. One email when it ships. Nothing else.</p>
       <form class="waitlist-form" data-waitlist>

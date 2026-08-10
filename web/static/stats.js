@@ -68,6 +68,13 @@ async function load() {
     fillTable("table-clicks", data.clicks_by_target || {});
     fillTable("table-paths", data.pageviews_by_path || {});
 
+    const survey = data.survey || { total: 0, would_use: {}, use_case_counts: {} };
+    $("#stat-survey-total").textContent = survey.total || 0;
+    $("#stat-survey-yes").textContent = survey.would_use?.yes || 0;
+    $("#stat-survey-maybe").textContent = survey.would_use?.maybe || 0;
+    $("#stat-survey-no").textContent = survey.would_use?.no || 0;
+    fillTable("table-use-cases", survey.use_case_counts || {});
+
     bodyEl.hidden = false;
   } catch (e) {
     showError(e.message);

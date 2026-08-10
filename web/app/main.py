@@ -19,13 +19,14 @@ Security posture:
 - Security headers (CSP self-only, nosniff, frame-deny, ...) on every
   response.
 - No auth, no accounts, no cookies. Stored data: the waitlist, contact
-  messages, and first-party analytics (pageview/click events tagged with a
-  random per-tab session id, no IP, no cross-site tracking, no third party
-  involved -- see analytics.py). /api/stats exposes aggregates from that
-  data, gated behind SYNTH_SCALE_STATS_KEY. All three persist to local
-  JSONL files by default, or to Postgres tables if SYNTH_SCALE_STORAGE_DB_URL
-  is set (see storage.py) -- the latter is what actually survives on a
-  platform like Vercel where the filesystem doesn't.
+  messages, a "would you use this" feedback survey, and first-party
+  analytics (pageview/click events tagged with a random per-tab session id,
+  no IP, no cross-site tracking, no third party involved -- see
+  analytics.py). /api/stats exposes aggregates from that data, gated behind
+  SYNTH_SCALE_STATS_KEY. All four persist to local JSONL files by default,
+  or to Postgres tables if SYNTH_SCALE_STORAGE_DB_URL is set (see
+  storage.py) -- the latter is what actually survives on a platform like
+  Vercel where the filesystem doesn't.
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import analytics, contact, service
+from . import analytics, contact, service, survey
 from .ratelimit import SlidingWindowLimiter
 from .waitlist import Waitlist, valid_email
 
@@ -85,6 +86,10 @@ CONTACT_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_CONTACT_RATE_LIMIT", "5"))
 # turned into a free-form log-spam endpoint.
 TRACK_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_TRACK_RATE_LIMIT", "120"))
 
+# One person shouldn't be able to flood the feedback data with repeat
+# submissions; low limit because a real user only fills this out once.
+SURVEY_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_SURVEY_RATE_LIMIT", "5"))
+
 # /api/stats is gated behind this shared secret (sent as an X-Stats-Key
 # header, never a query param, so it never lands in server/proxy access
 # logs or browser history). Unset (the default) means the endpoint 404s
@@ -105,9 +110,10 @@ limiter = SlidingWindowLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECO
 db_limiter = SlidingWindowLimiter(limit=DB_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 contact_limiter = SlidingWindowLimiter(limit=CONTACT_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 track_limiter = SlidingWindowLimiter(limit=TRACK_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
+survey_limiter = SlidingWindowLimiter(limit=SURVEY_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 stats_limiter = SlidingWindowLimiter(limit=20, window_seconds=RATE_WINDOW_SECONDS)
 
-waitlist = contact_store = analytics_store = None
+waitlist = contact_store = analytics_store = survey_store = None
 if STORAGE_DB_URL:
     if not DB_CONNECT_AVAILABLE:
         raise RuntimeError(
@@ -119,6 +125,7 @@ if STORAGE_DB_URL:
         waitlist = storage.WaitlistDB(STORAGE_DB_URL)
         contact_store = storage.ContactDB(STORAGE_DB_URL)
         analytics_store = storage.AnalyticsDB(STORAGE_DB_URL)
+        survey_store = storage.SurveyDB(STORAGE_DB_URL)
     except Exception as exc:  # pragma: no cover - depends on live network/DB
         # A misconfigured or momentarily-unreachable storage DB shouldn't take
         # the whole site down -- fall back to (locally durable, if the
@@ -132,6 +139,7 @@ if waitlist is None:
     waitlist = Waitlist(DATA_DIR / "waitlist.jsonl")
     contact_store = contact.ContactStore(DATA_DIR / "contact_messages.jsonl")
     analytics_store = analytics.AnalyticsStore(DATA_DIR / "analytics.jsonl")
+    survey_store = survey.SurveyStore(DATA_DIR / "survey.jsonl")
 
 app = FastAPI(title="Synth-Scale", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -266,6 +274,13 @@ class TrackRequest(BaseModel):
     path: str = Field(default="/", max_length=200)
     target: str = Field(default="", max_length=100)
     session_id: str = Field(default="", max_length=64)
+
+
+class SurveyRequest(BaseModel):
+    would_use: Literal["yes", "maybe", "no"]
+    use_case: str = Field(default="", max_length=survey.MAX_TEXT_LEN)
+    blockers: str = Field(default="", max_length=survey.MAX_TEXT_LEN)
+    email: str = Field(default="", max_length=254)
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +456,30 @@ def track(req: TrackRequest, request: Request):
     return {"ok": True}
 
 
+@app.post("/api/survey")
+def survey_submit(req: SurveyRequest, request: Request):
+    allowed, retry_after = survey_limiter.check(client_ip(request))
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Too many submissions. Try again in ~{max(retry_after // 60, 1)} min."},
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    email = req.email.strip().lower()
+    if email and not valid_email(email):
+        raise HTTPException(status_code=422, detail="That doesn't look like a valid email address.")
+
+    survey_store.add(
+        req.would_use,
+        req.use_case.strip(),
+        req.blockers.strip(),
+        email,
+        request.headers.get("user-agent", ""),
+    )
+    return {"ok": True}
+
+
 @app.get("/api/stats")
 def stats(request: Request, x_stats_key: str = Header(default="")):
     """Aggregate site stats: pageviews, unique sessions, click counts by
@@ -460,6 +499,7 @@ def stats(request: Request, x_stats_key: str = Header(default="")):
         **analytics_store.stats(),
         "waitlist_count": waitlist.count,
         "contact_messages": contact_store.count(),
+        "survey": survey_store.stats(),
     }
 
 

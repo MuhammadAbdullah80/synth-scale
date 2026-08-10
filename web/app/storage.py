@@ -1,4 +1,5 @@
-"""Optional Postgres-backed persistence for waitlist / contact / analytics.
+"""Optional Postgres-backed persistence for waitlist / contact / analytics /
+survey responses.
 
 By default this app persists to JSONL files under SYNTH_SCALE_DATA_DIR,
 which is fine on a platform with a real persistent filesystem (Render, Fly,
@@ -8,7 +9,7 @@ that is not guaranteed to survive between invocations.
 Setting SYNTH_SCALE_STORAGE_DB_URL to a Postgres connection string (a
 Supabase Session/Transaction Pooler string works well: IPv4, free on every
 tier, built for exactly this many-short-connections pattern) switches all
-three stores to Postgres tables instead, auto-created on first use. This is
+four stores to Postgres tables instead, auto-created on first use. This is
 a separate, operator-owned connection string from the one end users paste
 into "Connect to Supabase" on the playground -- that one is per-request and
 never stored (see service_db.py / dbsafety.py); this one is long-lived
@@ -53,6 +54,15 @@ CREATE TABLE IF NOT EXISTS ss_analytics_events (
     ua TEXT
 );
 CREATE INDEX IF NOT EXISTS ss_analytics_events_event_idx ON ss_analytics_events (event);
+CREATE TABLE IF NOT EXISTS ss_survey (
+    id BIGSERIAL PRIMARY KEY,
+    would_use TEXT NOT NULL,
+    use_case TEXT,
+    blockers TEXT,
+    email TEXT,
+    ts TIMESTAMPTZ NOT NULL,
+    ua TEXT
+);
 """
 
 
@@ -184,5 +194,44 @@ class AnalyticsDB:
                 "clicks_by_target": clicks_by_target,
                 "pageviews_by_path": pageviews_by_path,
             }
+        finally:
+            conn.close()
+
+
+class SurveyDB:
+    """Same public interface as survey.SurveyStore, backed by Postgres."""
+
+    def __init__(self, db_url: str):
+        self.db_url = db_url
+
+    def add(self, would_use: str, use_case: str, blockers: str, email: str, user_agent: str = "") -> None:
+        conn = _connect(self.db_url)
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO ss_survey (would_use, use_case, blockers, email, ts, ua) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (would_use, use_case, blockers, email, datetime.now(timezone.utc), user_agent[:300]),
+                )
+        finally:
+            conn.close()
+
+    def stats(self) -> dict:
+        from .survey import WOULD_USE_VALUES
+
+        conn = _connect(self.db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM ss_survey")
+                total = cur.fetchone()[0]
+                cur.execute("SELECT would_use, COUNT(*) FROM ss_survey GROUP BY would_use")
+                rows = dict(cur.fetchall())
+                would_use = {v: rows.get(v, 0) for v in WOULD_USE_VALUES}
+                cur.execute(
+                    "SELECT use_case, COUNT(*) FROM ss_survey WHERE use_case IS NOT NULL AND use_case <> '' "
+                    "GROUP BY use_case ORDER BY COUNT(*) DESC"
+                )
+                use_case_counts = dict(cur.fetchall())
+            return {"total": total, "would_use": would_use, "use_case_counts": use_case_counts}
         finally:
             conn.close()
