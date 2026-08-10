@@ -41,6 +41,48 @@ CREATE TABLE orders (
 );
 `;
 
+/* ---- first-party analytics: no cookies, no third party, best-effort ---- */
+function sessionId() {
+  const KEY = "ss_sid";
+  try {
+    let sid = sessionStorage.getItem(KEY);
+    if (!sid) {
+      sid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      sessionStorage.setItem(KEY, sid);
+    }
+    return sid;
+  } catch (_) {
+    return ""; // sessionStorage unavailable (private mode etc.); still track, just without a session id
+  }
+}
+
+function track(event, target) {
+  try {
+    const body = JSON.stringify({
+      event,
+      path: location.pathname,
+      target: target || "",
+      session_id: sessionId(),
+    });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/track", new Blob([body], { type: "application/json" }));
+    } else {
+      fetch("/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      }).catch(() => {});
+    }
+  } catch (_) { /* tracking is best-effort and must never block the UI */ }
+}
+
+track("pageview");
+document.addEventListener("click", (ev) => {
+  const el = ev.target.closest("[data-track]");
+  if (el) track("click", el.getAttribute("data-track"));
+});
+
 const $ = (sel) => document.querySelector(sel);
 const ddlEl = $("#ddl");
 const dbUrlEl = $("#db-url");

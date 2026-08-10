@@ -253,3 +253,22 @@ td.null { color: var(--text-dim); font-style: italic; }
   .control-buttons { margin-left: 0; }
   .why-item { grid-template-columns: 2rem 1fr; gap: 0.9rem; }
 }
+
+/* ---- stats dashboard (private, unlinked) ---- */
+.stats-page { padding: 3rem 0 4rem; }
+.stats-key-row { display: flex; flex-wrap: wrap; gap: 0.6rem; max-width: 34rem; margin-bottom: 1.5rem; }
+.stats-key-row input {
+  flex: 1 1 12rem; font-family: var(--mono); font-size: 0.9rem; color: var(--text);
+  background: var(--bg-raise); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.55rem 0.8rem;
+}
+.stats-key-row input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.stats-body h2 { font-size: 1.1rem; margin: 2rem 0 0.6rem; }
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.9rem; margin-bottom: 1rem; }
+.stat-tile {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  background: var(--bg-raise); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+.stat-num { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; color: var(--text); }
+.stat-label { font-size: 0.8rem; color: var(--text-dim); }

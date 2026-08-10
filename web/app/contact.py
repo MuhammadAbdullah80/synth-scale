@@ -52,6 +52,13 @@ class ContactStore:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                 f.flush()
 
+    def count(self) -> int:
+        if not self.path.exists():
+            return 0
+        with self._lock:
+            text = self.path.read_text(encoding="utf-8")
+        return sum(1 for line in text.splitlines() if line.strip())
+
 
 def send_contact_email(name: str, email: str, message: str) -> bool:
     """Best-effort SMTP send. Returns False (not an exception) if SMTP isn't

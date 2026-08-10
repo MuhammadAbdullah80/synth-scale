@@ -14,11 +14,11 @@
   <div class="wrap header-row">
     <a class="brand" href="/">synth<span class="brand-accent">-scale</span></a>
     <nav class="site-nav">
-      <a href="#playground">Playground</a>
-      <a href="#why">Why</a>
-      <a href="#cli">CLI</a>
-      <a href="#contact">Contact</a>
-      <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">GitHub</a>
+      <a href="#playground" data-track="nav-playground">Playground</a>
+      <a href="#why" data-track="nav-why">Why</a>
+      <a href="#cli" data-track="nav-cli">CLI</a>
+      <a href="#contact" data-track="nav-contact">Contact</a>
+      <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener" data-track="nav-github">GitHub</a>
     </nav>
   </div>
 </header>
@@ -33,13 +33,13 @@
       every CHECK passes, every run with the same seed is byte-identical. No LLM in the data path.</p>
 
       <div class="hero-actions">
-        <code class="chip" id="pip-chip" title="Click to copy">pip install synth-scale<span class="copy-hint">copy</span></code>
-        <a class="btn btn-ghost" href="#playground">Try it in the browser &darr;</a>
+        <code class="chip" id="pip-chip" title="Click to copy" data-track="pip-install-copy">pip install synth-scale<span class="copy-hint">copy</span></code>
+        <a class="btn btn-ghost" href="#playground" data-track="hero-try-it">Try it in the browser &darr;</a>
       </div>
 
       <form class="waitlist-form" data-waitlist>
         <input type="email" name="email" placeholder="you@company.com" required autocomplete="email" aria-label="Email address">
-        <button type="submit" class="btn btn-primary">Join the waitlist</button>
+        <button type="submit" class="btn btn-primary" data-track="waitlist-submit-hero">Join the waitlist</button>
         <p class="waitlist-msg" role="status"></p>
       </form>
       <p class="social-proof" data-waitlist-count hidden></p>
@@ -86,9 +86,9 @@
           <input type="number" id="seed" value="42" min="0" step="1">
         </label>
         <div class="control-buttons">
-          <button id="generate" class="btn btn-primary">Generate</button>
-          <button id="dl-sql" class="btn btn-ghost" disabled>Download SQL</button>
-          <button id="dl-csv" class="btn btn-ghost" disabled>Download CSV</button>
+          <button id="generate" class="btn btn-primary" data-track="generate">Generate</button>
+          <button id="dl-sql" class="btn btn-ghost" disabled data-track="download-sql">Download SQL</button>
+          <button id="dl-csv" class="btn btn-ghost" disabled data-track="download-csv">Download CSV</button>
         </div>
       </div>
 
@@ -152,7 +152,7 @@ $ synth-scale --ddl schema.sql --rows 1000 --seed 42 --format sql --out ./seed
 
 <span class="c"># point it at a live database instead of a .sql file</span>
 $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
-      <a class="btn btn-ghost" href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">Read the docs on GitHub &rarr;</a>
+      <a class="btn btn-ghost" href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener" data-track="cli-docs-github">Read the docs on GitHub &rarr;</a>
     </div>
   </section>
 
@@ -175,7 +175,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
           <span>Message</span>
           <textarea id="contact-message" name="message" rows="5" required maxlength="4000"></textarea>
         </label>
-        <button type="submit" class="btn btn-primary" id="contact-submit">Send message</button>
+        <button type="submit" class="btn btn-primary" id="contact-submit" data-track="contact-submit">Send message</button>
         <p class="contact-msg" id="contact-status" role="status"></p>
       </form>
     </div>
@@ -189,7 +189,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
       <p class="section-sub">PyPI release, Supabase introspection, CI data contracts. One email when it ships. Nothing else.</p>
       <form class="waitlist-form" data-waitlist>
         <input type="email" name="email" placeholder="you@company.com" required autocomplete="email" aria-label="Email address">
-        <button type="submit" class="btn btn-primary">Join the waitlist</button>
+        <button type="submit" class="btn btn-primary" data-track="waitlist-submit-bottom">Join the waitlist</button>
         <p class="waitlist-msg" role="status"></p>
       </form>
     </div>
@@ -199,7 +199,9 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
 <footer class="site-footer">
   <div class="wrap">
     <p>synth-scale: deterministic synthetic data for Postgres &amp; Supabase.
-    No cookies, no analytics, no accounts. Your DDL is parsed in memory and never stored or executed.</p>
+    No cookies, no accounts, no third-party trackers. We log anonymous page-view and click
+    counts (no IP addresses stored) to see what's useful. Your DDL is parsed in memory and never
+    stored or executed.</p>
   </div>
 </footer>
 

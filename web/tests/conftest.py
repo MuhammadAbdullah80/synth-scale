@@ -9,22 +9,29 @@ if str(WEB_DIR) not in sys.path:
 import pytest  # noqa: E402
 
 from app import main  # noqa: E402
+from app.analytics import AnalyticsStore  # noqa: E402
 from app.contact import ContactStore  # noqa: E402
 from app.waitlist import Waitlist  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def isolate_state(tmp_path, monkeypatch):
-    """Fresh rate-limit windows and throwaway waitlist/contact files per test."""
+    """Fresh rate-limit windows and throwaway waitlist/contact/analytics files
+    per test."""
     main.limiter.reset()
     main.db_limiter.reset()
     main.contact_limiter.reset()
+    main.track_limiter.reset()
+    main.stats_limiter.reset()
     monkeypatch.setattr(main, "waitlist", Waitlist(tmp_path / "waitlist.jsonl"))
     monkeypatch.setattr(main, "contact_store", ContactStore(tmp_path / "contact_messages.jsonl"))
+    monkeypatch.setattr(main, "analytics_store", AnalyticsStore(tmp_path / "analytics.jsonl"))
     yield
     main.limiter.reset()
     main.db_limiter.reset()
     main.contact_limiter.reset()
+    main.track_limiter.reset()
+    main.stats_limiter.reset()
 
 
 @pytest.fixture()

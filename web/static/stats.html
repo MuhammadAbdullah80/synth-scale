@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Synth-Scale: stats</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%81%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/">synth<span class="brand-accent">-scale</span></a>
+    <nav class="site-nav">
+      <a href="/">Site</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="stats-page">
+    <div class="wrap">
+      <p class="kicker">Private &middot; not linked from the site</p>
+      <h1>Stats</h1>
+      <p class="section-sub">Pageviews, clicks, waitlist and contact counts, from the site's own
+      first-party log. Paste the stats key below; it's kept only in this browser's local storage
+      and sent as a request header, never a URL parameter.</p>
+
+      <div class="stats-key-row">
+        <input type="password" id="stats-key" placeholder="Stats key" autocomplete="off" spellcheck="false" aria-label="Stats key">
+        <button id="stats-load" class="btn btn-primary">Load</button>
+        <button id="stats-forget" class="btn btn-ghost">Forget key</button>
+      </div>
+
+      <p id="stats-error" class="error" role="alert" hidden></p>
+      <div id="stats-body" class="stats-body" hidden>
+        <div class="stat-tiles">
+          <div class="stat-tile"><span class="stat-num" id="stat-pageviews">0</span><span class="stat-label">Pageviews</span></div>
+          <div class="stat-tile"><span class="stat-num" id="stat-sessions">0</span><span class="stat-label">Unique sessions</span></div>
+          <div class="stat-tile"><span class="stat-num" id="stat-waitlist">0</span><span class="stat-label">Waitlist signups</span></div>
+          <div class="stat-tile"><span class="stat-num" id="stat-contact">0</span><span class="stat-label">Contact messages</span></div>
+        </div>
+
+        <h2>Clicks by target</h2>
+        <div class="table-scroll">
+          <table class="data" id="table-clicks">
+            <thead><tr><th>Target</th><th>Clicks</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h2>Pageviews by path</h2>
+        <div class="table-scroll">
+          <table class="data" id="table-paths">
+            <thead><tr><th>Path</th><th>Views</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/stats.js"></script>
+</body>
+</html>

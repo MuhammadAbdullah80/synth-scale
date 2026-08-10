@@ -18,22 +18,27 @@ Security posture:
 - Request bodies are capped (413) before they reach any handler.
 - Security headers (CSP self-only, nosniff, frame-deny, ...) on every
   response.
-- No auth, no accounts, no cookies, no analytics. The only stored data is
-  the waitlist JSONL (email, timestamp, user-agent).
+- No auth, no accounts, no cookies. Stored data: the waitlist JSONL (email,
+  timestamp, user-agent), the contact-message JSONL, and a first-party
+  analytics JSONL (pageview/click events tagged with a random per-tab
+  session id, no IP, no cross-site tracking, no third party involved --
+  see analytics.py). /api/stats exposes aggregates from that log, gated
+  behind SYNTH_SCALE_STATS_KEY.
 """
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import contact, service
+from . import analytics, contact, service
 from .ratelimit import SlidingWindowLimiter
 from .waitlist import Waitlist, valid_email
 
@@ -70,11 +75,25 @@ DB_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_DB_RATE_LIMIT", "3"))
 # capping abuse of whatever mailbox SYNTH_SCALE_SMTP_USER is.
 CONTACT_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_CONTACT_RATE_LIMIT", "5"))
 
+# /api/track fires automatically on every page load and tagged click, so it
+# needs real headroom -- generous default, still capped so it can't be
+# turned into a free-form log-spam endpoint.
+TRACK_RATE_LIMIT = int(os.environ.get("SYNTH_SCALE_TRACK_RATE_LIMIT", "120"))
+
+# /api/stats is gated behind this shared secret (sent as an X-Stats-Key
+# header, never a query param, so it never lands in server/proxy access
+# logs or browser history). Unset (the default) means the endpoint 404s
+# unconditionally -- there is no "stats are open" default.
+STATS_KEY = os.environ.get("SYNTH_SCALE_STATS_KEY", "")
+
 limiter = SlidingWindowLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 db_limiter = SlidingWindowLimiter(limit=DB_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 contact_limiter = SlidingWindowLimiter(limit=CONTACT_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
+track_limiter = SlidingWindowLimiter(limit=TRACK_RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
+stats_limiter = SlidingWindowLimiter(limit=20, window_seconds=RATE_WINDOW_SECONDS)
 waitlist = Waitlist(DATA_DIR / "waitlist.jsonl")
 contact_store = contact.ContactStore(DATA_DIR / "contact_messages.jsonl")
+analytics_store = analytics.AnalyticsStore(DATA_DIR / "analytics.jsonl")
 
 app = FastAPI(title="Synth-Scale", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -202,6 +221,13 @@ class ContactRequest(BaseModel):
     name: str = Field(default="", max_length=100)
     email: str = Field(min_length=3, max_length=254)
     message: str = Field(min_length=1, max_length=4000)
+
+
+class TrackRequest(BaseModel):
+    event: Literal["pageview", "click"]
+    path: str = Field(default="/", max_length=200)
+    target: str = Field(default="", max_length=100)
+    session_id: str = Field(default="", max_length=64)
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +386,43 @@ def contact_submit(req: ContactRequest, request: Request):
     contact_store.add(name, email, message, request.headers.get("user-agent", ""))
     contact.send_contact_email(name, email, message)
     return {"ok": True}
+
+
+@app.post("/api/track")
+def track(req: TrackRequest, request: Request):
+    allowed, retry_after = track_limiter.check(client_ip(request))
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limited."},
+            headers={"Retry-After": str(retry_after)},
+        )
+    analytics_store.record(
+        req.event, req.path, req.target, req.session_id, request.headers.get("user-agent", "")
+    )
+    return {"ok": True}
+
+
+@app.get("/api/stats")
+def stats(request: Request, x_stats_key: str = Header(default="")):
+    """Aggregate site stats: pageviews, unique sessions, click counts by
+    target, plus waitlist/contact counts. Gated behind SYNTH_SCALE_STATS_KEY
+    (sent as a header, not a query param) so it 404s for everyone else --
+    404 rather than 401/403 so the endpoint's existence isn't advertised."""
+    allowed, retry_after = stats_limiter.check(client_ip(request))
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limited."},
+            headers={"Retry-After": str(retry_after)},
+        )
+    if not STATS_KEY or not secrets.compare_digest(x_stats_key, STATS_KEY):
+        raise HTTPException(status_code=404)
+    return {
+        **analytics_store.stats(),
+        "waitlist_count": waitlist.count,
+        "contact_messages": contact_store.count(),
+    }
 
 
 # Static frontend at / (mounted last so /api/* wins).
