@@ -17,6 +17,7 @@
       <a href="#playground" data-track="nav-playground">Playground</a>
       <a href="#why" data-track="nav-why">Why</a>
       <a href="#cli" data-track="nav-cli">CLI</a>
+      <a href="#faq" data-track="nav-faq">FAQ</a>
       <a href="#feedback" data-track="nav-feedback">Feedback</a>
       <a href="#contact" data-track="nav-contact">Contact</a>
       <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener" data-track="nav-github">GitHub</a>
@@ -132,6 +133,16 @@
             few power users own most of the orders, like real production data.</p>
           </div>
         </li>
+        <li class="why-item">
+          <span class="why-num">04</span>
+          <div>
+            <h3>Not a Faker replacement, a layer above it</h3>
+            <p>Faker generates a realistic name, email, or date with zero concept of your schema. We use Faker
+            under the hood for exactly that, then add what you'd otherwise hand-build yourself: parsing your DDL,
+            resolving foreign keys in dependency order, and satisfying every <code>CHECK</code> and
+            <code>UNIQUE</code> constraint by construction.</p>
+          </div>
+        </li>
       </ol>
     </div>
   </section>
@@ -157,10 +168,50 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
     </div>
   </section>
 
+  <!-- ============================ FAQ =============================== -->
+  <section id="faq" class="faq">
+    <div class="wrap">
+      <p class="kicker">04 &middot; FAQ</p>
+      <h2>Questions people actually ask</h2>
+      <div class="faq-list">
+        <details class="faq-item">
+          <summary data-track="faq-llm">Does it use an LLM to generate the data?</summary>
+          <p>No. Every row comes from deterministic, seeded generation: Faker-backed value generation plus
+          constraint-satisfying logic on top. No API calls, no network dependency, no run-to-run drift.</p>
+        </details>
+        <details class="faq-item">
+          <summary data-track="faq-databases">Which databases does it support?</summary>
+          <p>Postgres and Supabase today. DDL parsing, constraint handling, and the "Connect to Supabase"
+          introspection are all Postgres-specific. MySQL and SQLite aren't supported yet.</p>
+        </details>
+        <details class="faq-item">
+          <summary data-track="faq-privacy">Is my schema or connection string stored anywhere?</summary>
+          <p>No. Pasted DDL is parsed in memory and discarded once the response is sent. A "Connect to Supabase"
+          connection string is used for a single request and is never logged or written to disk.</p>
+        </details>
+        <details class="faq-item">
+          <summary data-track="faq-playground-vs-cli">What's the difference between this playground and the CLI?</summary>
+          <p>The playground is a capped browser demo: 15 tables, 1,000 rows, no direct writes to your database.
+          The CLI has no caps and can load rows straight into your own database.</p>
+        </details>
+        <details class="faq-item">
+          <summary data-track="faq-ci">Can I use it in CI?</summary>
+          <p>That's the main use case. <code>pip install synth-scale</code>, run it against your schema with a
+          fixed seed, and assert on deterministic output.</p>
+        </details>
+        <details class="faq-item">
+          <summary data-track="faq-pricing">Is it free?</summary>
+          <p>Yes. The CLI is <a href="https://github.com/MuhammadAbdullah80/synth-scale" rel="noopener">open
+          source</a> and free. This playground is a free demo of the same engine.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <!-- ========================== FEEDBACK =========================== -->
   <section id="feedback" class="feedback">
     <div class="wrap">
-      <p class="kicker">04 &middot; Feedback</p>
+      <p class="kicker">05 &middot; Feedback</p>
       <h2>Would you actually use this?</h2>
       <p class="section-sub">Two questions, no email required. Tells us whether to keep building this
       or go do something else with our time.</p>
@@ -203,7 +254,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
   <!-- ============================ CONTACT ============================ -->
   <section id="contact" class="contact">
     <div class="wrap">
-      <p class="kicker">05 &middot; Contact</p>
+      <p class="kicker">06 &middot; Contact</p>
       <h2>Send us a message</h2>
       <p class="section-sub">Questions, bug reports, feature requests. Goes straight to the maintainer.</p>
       <form class="contact-form" id="contact-form">
@@ -228,7 +279,7 @@ $ synth-scale --from-db --db-url postgres://... --rows 1000</code></pre>
   <!-- ========================= BOTTOM CTA ========================= -->
   <section class="bottom-cta">
     <div class="wrap">
-      <p class="kicker">06 &middot; Stay in the loop</p>
+      <p class="kicker">07 &middot; Stay in the loop</p>
       <h2>Get launch updates</h2>
       <p class="section-sub">PyPI release, Supabase introspection, CI data contracts. One email when it ships. Nothing else.</p>
       <form class="waitlist-form" data-waitlist>
