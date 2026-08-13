@@ -49,4 +49,4 @@ web/           FastAPI + vanilla-JS playground (paste DDL or connect a database)
 demo/          Demo Day script, benchmark writeup, case study
 ```
 
-Built by Comebck Pakistan Cohort 1, Squad Synth-Scale.
+Built by Comebck Pakistan Cohort 1, Squad Shigar.
