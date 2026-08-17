@@ -67,15 +67,31 @@
 
       <div id="panel-db" class="source-panel" hidden>
         <p class="section-sub">Paste a Postgres connection string (Supabase: Project Settings &rarr;
-        Database &rarr; Connection string, the Session Pooler one works best). We introspect your
-        schema and generate data <strong>read-only</strong>: nothing is ever written back to your
-        database, and the connection string is used once for this request and never stored or logged.
-        Rate-limited separately (3/hour) because this opens a real connection to your host.</p>
+        Database &rarr; Connection string, the Session Pooler one works best).</p>
+
+        <div class="trust-box">
+          <p class="trust-box-title">Before you paste a real connection string</p>
+          <ul>
+            <li><span class="trust-check" aria-hidden="true">&#10003;</span> <strong>Read-only.</strong>
+            No write path exists anywhere in this app &mdash; only introspection queries against
+            <code>information_schema</code> / <code>pg_catalog</code>.</li>
+            <li><span class="trust-check" aria-hidden="true">&#10003;</span> <strong>Never stored.</strong>
+            Used once for this request, then discarded. Not written to disk, not logged, gone once the
+            response is sent.</li>
+            <li><span class="trust-check" aria-hidden="true">&#10003;</span> <strong>SSRF-guarded.</strong>
+            Private, loopback, and internal hosts are rejected before any connection opens
+            (<a href="https://github.com/MuhammadAbdullah80/synth-scale/blob/master/web/app/dbsafety.py"
+            rel="noopener" data-track="trust-box-dbsafety-source"><code>dbsafety.py</code></a>, open source,
+            read it yourself).</li>
+          </ul>
+        </div>
+
         <input type="password" id="db-url" class="db-url-input" autocomplete="off" spellcheck="false"
           placeholder="postgresql://postgres.xxxx:password@aws-0-region.pooler.supabase.com:6543/postgres"
           aria-label="Database connection string">
-        <p class="db-url-hint">Only publicly reachable databases work here. Private/internal hosts are
-        rejected before we connect. For anything on a private network, use the <a href="#cli">CLI</a> instead.</p>
+        <p class="db-url-hint">Only publicly reachable databases work here, rate-limited to 3/hour since
+        this opens a real connection. For anything on a private network, use the <a href="#cli">CLI</a>
+        instead &mdash; or skip this entirely and paste DDL text on the other tab.</p>
       </div>
 
       <div class="controls">

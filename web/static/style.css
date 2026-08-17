@@ -176,6 +176,19 @@ section { padding: 4rem 0; }
 .db-url-hint { color: var(--text-dim); font-size: 0.82rem; margin: 0.5rem 0 0; }
 .db-url-hint a { color: var(--accent); }
 
+/* ---- trust box: the reassurance a caller needs to see BEFORE they type a
+   real credential into the password field below, not buried after it ---- */
+.trust-box {
+  background: var(--ok-soft); border: 1px solid var(--ok); border-radius: 8px;
+  padding: 0.9rem 1.1rem; margin-bottom: 0.9rem;
+}
+.trust-box-title { margin: 0 0 0.5rem; font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.trust-box ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.trust-box li { font-size: 0.85rem; color: var(--text-dim); line-height: 1.5; }
+.trust-check { color: var(--ok); font-weight: 700; margin-right: 0.15rem; }
+.trust-box code { font-family: var(--mono); font-size: 0.85em; background: var(--bg-inset); padding: 0.05em 0.3em; border-radius: 4px; }
+.trust-box a { color: var(--accent); }
+
 .error {
   background: var(--danger-soft); color: var(--danger);
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
