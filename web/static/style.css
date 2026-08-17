@@ -229,6 +229,27 @@ td.null { color: var(--text-dim); font-style: italic; }
 .why-item p { margin: 0; color: var(--text-dim); font-size: 0.94rem; max-width: 42rem; }
 .why-item code { font-family: var(--mono); font-size: 0.85em; background: var(--bg-inset); padding: 0.05em 0.3em; border-radius: 4px; }
 
+/* ---- compare ---- */
+.compare { border-top: 1px solid var(--border); }
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+.compare-col { border-radius: 10px; padding: 1rem; min-width: 0; }
+.compare-bad { background: var(--danger-soft); border: 1px solid var(--danger); }
+.compare-good { background: var(--ok-soft); border: 1px solid var(--ok); }
+.compare-label {
+  font-family: var(--mono); font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; margin: 0 0 0.7rem;
+}
+.compare-bad .compare-label { color: var(--danger); }
+.compare-good .compare-label { color: var(--ok); }
+.compare-col .codeblock { margin-bottom: 0.7rem; font-size: 0.78rem; }
+.compare-col .codeblock:last-of-type { margin-bottom: 0; }
+.compare-error { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+.compare-ok-note { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
+.compare-ok-note code {
+  font-family: var(--mono); font-size: 0.85em; background: var(--bg-raise);
+  padding: 0.05em 0.3em; border-radius: 4px;
+}
+
 /* ---- cli ---- */
 .codeblock {
   background: var(--code-bg); color: var(--code-text);
@@ -237,6 +258,28 @@ td.null { color: var(--text-dim); font-style: italic; }
   padding: 1rem 1.2rem; overflow-x: auto; margin: 0 0 1.2rem;
 }
 .codeblock .c { color: var(--code-comment); }
+
+/* ---- proof ---- */
+.proof { border-top: 1px solid var(--border); background: var(--bg-inset); }
+.proof-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.9rem;
+  margin: 1.2rem 0 1.6rem;
+}
+.proof-stat {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  background: var(--ok-soft); border: 1px solid var(--ok); border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+.proof-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; color: var(--ok); }
+.proof-label { font-size: 0.8rem; color: var(--text-dim); }
+.section-sub code, .db-url-hint code {
+  font-family: var(--mono); font-size: 0.85em; background: var(--bg-inset);
+  padding: 0.05em 0.3em; border-radius: 4px;
+}
+/* .proof itself sits on --bg-inset, so its own inline code chips need the
+   raised (white) surface instead -- otherwise chip and section background
+   are literally the same color and the chip disappears. */
+.proof .section-sub code, .proof .db-url-hint code { background: var(--bg-raise); }
 
 /* ---- faq (native <details>/<summary> accordion, no JS needed) ---- */
 .faq { border-top: 1px solid var(--border); }
@@ -325,6 +368,7 @@ td.null { color: var(--text-dim); font-style: italic; }
   .hero { padding-top: 3rem; }
   .control-buttons { margin-left: 0; }
   .why-item { grid-template-columns: 2rem 1fr; gap: 0.9rem; }
+  .compare-grid { grid-template-columns: 1fr; }
 }
 
 /* ---- stats dashboard (private, unlinked) ---- */
