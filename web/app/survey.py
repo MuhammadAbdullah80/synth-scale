@@ -47,9 +47,15 @@ class SurveyStore:
     def stats(self) -> dict:
         """Aggregate the whole log on demand -- same tradeoff as
         AnalyticsStore.stats(): only /api/stats reads this, so an O(n) scan
-        beats maintaining separate counters that could drift from disk."""
+        beats maintaining separate counters that could drift from disk.
+
+        Also returns the most recent responses verbatim (would_use, use_case,
+        blockers, email, ts) -- the aggregates alone don't let anyone read
+        what people actually wrote, which is the whole point of an open-text
+        feedback field. Capped at 200 so this can't grow unbounded."""
         would_use_counts = {v: 0 for v in WOULD_USE_VALUES}
         use_case_counts: dict[str, int] = {}
+        responses: list[dict] = []
         total = 0
         if self.path.exists():
             with self._lock:
@@ -69,10 +75,25 @@ class SurveyStore:
                 uc = (e.get("use_case") or "").strip()
                 if uc:
                     use_case_counts[uc] = use_case_counts.get(uc, 0) + 1
+                responses.append(
+                    {
+                        "would_use": wu,
+                        "use_case": uc,
+                        "blockers": (e.get("blockers") or "").strip(),
+                        "email": (e.get("email") or "").strip(),
+                        "ts": e.get("ts"),
+                    }
+                )
+        # Reverse the file's natural append order rather than re-sorting by
+        # the ts string -- ts is only second-precision, so two submissions
+        # in the same second would tie and a sort-by-ts can't tell which
+        # came first. Append order has no such ambiguity.
+        responses.reverse()
         return {
             "total": total,
             "would_use": would_use_counts,
             "use_case_counts": dict(
                 sorted(use_case_counts.items(), key=lambda kv: kv[1], reverse=True)
             ),
+            "responses": responses[:200],
         }

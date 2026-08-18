@@ -77,3 +77,24 @@ def test_stats_includes_survey_aggregates(client, monkeypatch):
     assert survey["total"] == 4
     assert survey["would_use"] == {"yes": 2, "maybe": 1, "no": 1}
     assert survey["use_case_counts"] == {"CI fixtures": 2, "demos": 1}
+
+
+def test_stats_survey_includes_full_responses(client, monkeypatch):
+    monkeypatch.setattr(main, "STATS_KEY", "correct-secret")
+
+    client.post(
+        "/api/survey",
+        json={"would_use": "yes", "use_case": "CI fixtures", "blockers": "trust", "email": "a@b.com"},
+    )
+    client.post("/api/survey", json={"would_use": "no", "blockers": "pointless"})
+
+    r = client.get("/api/stats", headers={"X-Stats-Key": "correct-secret"})
+    responses = r.json()["survey"]["responses"]
+    assert len(responses) == 2
+    # Most recent first.
+    assert responses[0]["would_use"] == "no"
+    assert responses[0]["blockers"] == "pointless"
+    assert responses[1]["would_use"] == "yes"
+    assert responses[1]["use_case"] == "CI fixtures"
+    assert responses[1]["email"] == "a@b.com"
+    assert all("ts" in r for r in responses)

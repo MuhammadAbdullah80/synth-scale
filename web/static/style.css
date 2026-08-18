@@ -393,3 +393,24 @@ td.null { color: var(--text-dim); font-style: italic; }
 .stat-tile.ok .stat-num { color: var(--ok); }
 .stat-tile.bad { border-color: var(--danger); }
 .stat-tile.bad .stat-num { color: var(--danger); }
+
+.feedback-count { font-family: var(--mono); font-size: 0.85rem; font-weight: 400; color: var(--text-dim); }
+.feedback-list { display: flex; flex-direction: column; gap: 0.7rem; margin-bottom: 1rem; }
+.feedback-response {
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 1rem;
+  background: var(--bg-raise);
+}
+.feedback-response-head {
+  display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem;
+  font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim);
+}
+.would-use-pill {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 0.1em 0.55em; border-radius: 999px; font-size: 0.72rem;
+}
+.would-use-pill.yes { background: var(--ok-soft); color: var(--ok); }
+.would-use-pill.maybe { background: var(--bg-inset); color: var(--text-dim); }
+.would-use-pill.no { background: var(--danger-soft); color: var(--danger); }
+.feedback-response dl { margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.feedback-response dt { font-size: 0.72rem; color: var(--text-dim); margin: 0; }
+.feedback-response dd { font-size: 0.88rem; color: var(--text); margin: 0 0 0.3rem; }

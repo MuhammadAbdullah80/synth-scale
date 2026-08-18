@@ -44,6 +44,63 @@ function fillTable(tableId, rows) {
   }
 }
 
+function fillFeedbackList(responses) {
+  const list = $("#feedback-list");
+  const countEl = $("#feedback-count");
+  list.textContent = "";
+  countEl.textContent = responses.length ? `(${responses.length} shown)` : "";
+
+  if (!responses.length) {
+    const p = document.createElement("p");
+    p.className = "section-sub";
+    p.textContent = "No responses yet.";
+    list.appendChild(p);
+    return;
+  }
+
+  for (const r of responses) {
+    const card = document.createElement("div");
+    card.className = "feedback-response";
+
+    const head = document.createElement("div");
+    head.className = "feedback-response-head";
+    const pill = document.createElement("span");
+    pill.className = `would-use-pill ${r.would_use || ""}`;
+    pill.textContent = r.would_use || "unknown";
+    head.appendChild(pill);
+    const ts = document.createElement("span");
+    ts.textContent = r.ts ? new Date(r.ts).toLocaleString() : "";
+    head.appendChild(ts);
+    if (r.email) {
+      const email = document.createElement("span");
+      email.textContent = r.email;
+      head.appendChild(email);
+    }
+    card.appendChild(head);
+
+    const dl = document.createElement("dl");
+    if (r.use_case) {
+      const dt = document.createElement("dt");
+      dt.textContent = "What for";
+      const dd = document.createElement("dd");
+      dd.textContent = r.use_case;
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    }
+    if (r.blockers) {
+      const dt = document.createElement("dt");
+      dt.textContent = "What would stop them";
+      const dd = document.createElement("dd");
+      dd.textContent = r.blockers;
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    }
+    if (dl.children.length) card.appendChild(dl);
+
+    list.appendChild(card);
+  }
+}
+
 async function load() {
   errEl.hidden = true;
   const key = keyInput.value.trim();
@@ -74,6 +131,7 @@ async function load() {
     $("#stat-survey-maybe").textContent = survey.would_use?.maybe || 0;
     $("#stat-survey-no").textContent = survey.would_use?.no || 0;
     fillTable("table-use-cases", survey.use_case_counts || {});
+    fillFeedbackList(survey.responses || []);
 
     bodyEl.hidden = false;
   } catch (e) {

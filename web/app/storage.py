@@ -232,6 +232,25 @@ class SurveyDB:
                     "GROUP BY use_case ORDER BY COUNT(*) DESC"
                 )
                 use_case_counts = dict(cur.fetchall())
-            return {"total": total, "would_use": would_use, "use_case_counts": use_case_counts}
+                cur.execute(
+                    "SELECT would_use, use_case, blockers, email, ts FROM ss_survey "
+                    "ORDER BY ts DESC, id DESC LIMIT 200"
+                )
+                responses = [
+                    {
+                        "would_use": r[0],
+                        "use_case": r[1] or "",
+                        "blockers": r[2] or "",
+                        "email": r[3] or "",
+                        "ts": r[4].isoformat() if r[4] else None,
+                    }
+                    for r in cur.fetchall()
+                ]
+            return {
+                "total": total,
+                "would_use": would_use,
+                "use_case_counts": use_case_counts,
+                "responses": responses,
+            }
         finally:
             conn.close()
